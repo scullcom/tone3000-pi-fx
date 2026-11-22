@@ -114,7 +114,7 @@ install -m 0755 -- "$binary" "$next"
 mv -f -- "$next" "$app/TONE3000"
 
 {
-  printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail'
+  printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'export T3K_DESKTOP_ID=tone3000-pi-fx'
   printf 'export XDG_CONFIG_HOME=%q\n' "${profile%/TONE3000}"
   printf 'export XDG_DATA_HOME=%q\n' "$app"
   printf 'export XDG_CACHE_HOME=%q\n' "$cache_home"
@@ -161,14 +161,24 @@ quoted = ''.join(chr(92) + ch if ch in special else ch for ch in path.replace('%
 print('"'+quoted.replace('\\','\\\\')+'"')
 PY
 )
+icon_dir="$data_home/icons/hicolor/512x512/apps"
+mkdir -p -- "$icon_dir"
+install -m 0644 -- "$source_dir/script/installer/linux/tone3000.png" "$icon_dir/tone3000-pi-fx.png"
 cat > "$data_home/applications/tone3000-pi-fx.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=TONE3000 FX
 Comment=NAM, cabinet impulses, and LV2 guitar effects
 Exec=$desktop_exec
-Icon=audio-card
+Icon=tone3000-pi-fx
+StartupWMClass=tone3000-pi-fx
 Terminal=false
 Categories=AudioVideo;Audio;
 DESKTOP
+if command -v gtk-update-icon-cache >/dev/null; then
+  gtk-update-icon-cache --force --ignore-theme-index "$data_home/icons/hicolor" >/dev/null 2>&1 || true
+fi
+if command -v update-desktop-database >/dev/null; then
+  update-desktop-database "$data_home/applications" >/dev/null 2>&1 || true
+fi
 printf 'Installed. Open TONE3000 FX from the desktop menu or run:\n  %s\n' "$launcher"

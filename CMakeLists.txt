@@ -181,7 +181,7 @@ endif()
 # Expose LV2 port units and named choices. Honour an explicit XDG config root
 # for standalone settings, presets, and the diagnostic log.
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HEADLESS)
-    foreach(_juce_patch_name IN ITEMS juce-lv2-parameter-metadata juce-linux-xdg-config-home)
+    foreach(_juce_patch_name IN ITEMS juce-lv2-parameter-metadata juce-linux-xdg-config-home juce-linux-desktop-id)
         set(_juce_patch "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/${_juce_patch_name}.patch")
         set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_juce_patch}")
         execute_process(

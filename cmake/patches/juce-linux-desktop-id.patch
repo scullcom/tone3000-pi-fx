@@ -1,0 +1,11 @@
+diff --git a/modules/juce_gui_basics/native/juce_XWindowSystem_linux.cpp b/modules/juce_gui_basics/native/juce_XWindowSystem_linux.cpp
+--- a/modules/juce_gui_basics/native/juce_XWindowSystem_linux.cpp
++++ b/modules/juce_gui_basics/native/juce_XWindowSystem_linux.cpp
+@@ -1703,4 +1703,6 @@ void XWindowSystem::setWindowProperties (::Window windowH) const
+         {
+-            auto appName = app->getApplicationName();
++            // The launcher ID also identifies this window to XWayland taskbars.
++            auto appName = SystemStats::getEnvironmentVariable ("T3K_DESKTOP_ID",
++                                                                app->getApplicationName());
+             classHint->res_name  = (char*) appName.getCharPointer().getAddress();
+             classHint->res_class = (char*) appName.getCharPointer().getAddress();
