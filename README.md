@@ -2,15 +2,15 @@
 
 Play through NAM captures, cabinet impulse responses, and LV2 effects in one signal chain. This community fork keeps the TONE3000 standalone interface and adds native ARM64 LV2 hosting for Raspberry Pi.
 
-**Powered by TONE3000** for browsing and loading tones. [TONE3000](https://www.tone3000.com) ? [Original project](https://github.com/tone-3000/tone3000-plugin)
+**Powered by TONE3000** for browsing and loading tones. [TONE3000](https://www.tone3000.com) - [Original project](https://github.com/tone-3000/tone3000-plugin)
 
 ![Clean amp, tremolo, and stereo reverb in the TONE3000 FX signal chain](docs/screenshots/pi-signal-chain.png)
 
 ## Install
 
-**Target system:** Raspberry Pi 5 running 64-bit Raspberry Pi OS Trixie with a desktop session. You?ll need an internet connection and a user account that can install packages with `sudo`.
+**Target system:** Raspberry Pi 5 running 64-bit Raspberry Pi OS Trixie with a desktop session. You'll need an internet connection and a user account that can install packages with `sudo`.
 
-On this repository?s GitHub page, choose **Code ? Download ZIP**, extract it on the Pi, and open a terminal in the extracted folder. Run:
+On this repository's GitHub page, choose **Code - Download ZIP**, extract it on the Pi, and open a terminal in the extracted folder. Run:
 
 ```sh
 bash install.sh
@@ -37,7 +37,7 @@ The launcher uses a separate profile under `${XDG_CONFIG_HOME:-$HOME/.config}/to
 ## Play your first rig
 
 1. Connect your USB audio interface. Open **Audio Settings**, select your guitar input and monitoring output, and start with a buffer of 256 samples. Raise it if you hear dropouts.
-2. Open **Clean Trem and Verb** from the presets menu. It contains **RiffSmith Clean ? GxTremolo ? GxReverb-Stereo** with the author?s effect settings. RiffSmith Clean includes the cabinet, and its model is embedded so the demo can play offline. Install Guitarix when prompted to hear the tremolo and reverb.
+2. Open **Clean Trem and Verb** from the presets menu. It contains **RiffSmith Clean ? GxTremolo ? GxReverb-Stereo** with the author's effect settings. RiffSmith Clean includes the cabinet, and its model is embedded so the demo can play offline. Install Guitarix when prompted to hear the tremolo and reverb.
 3. Click an effect tile to adjust its controls. Use the power button to bypass it, the swap arrows to replace it in the same slot, or drag the tile to change the order.
 4. Save your own copy and try it with another capture.
 
@@ -45,7 +45,7 @@ To browse the TONE3000 catalog, sign in from the app using your own account. The
 
 ## Find and customise effects
 
-Open **Add ? LV2 Effect**. **Favourites** is your shortlist. Select **Other installed effects** and start typing to filter by name. Click an effect?s name to load it or **+** to favourite it. The bin button removes a favourite from the shortlist. The same picker opens from the swap arrows on an LV2 tile.
+Open **Add - LV2 Effect**. **Favourites** is your shortlist. Select **Other installed effects** and start typing to filter by name. Click an effect?s name to load it or **+** to favourite it. The bin button removes a favourite from the shortlist. The same picker opens from the swap arrows on an LV2 tile.
 
 ![The Other installed effects panel filtering the list as you type](docs/screenshots/pi-effect-search.png)
 
