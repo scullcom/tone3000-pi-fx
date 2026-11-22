@@ -1369,7 +1369,7 @@ void TONE3000Processor::applyPreparedModelToChainBlock(ChainBlock& block, ChainB
     // were never seen by prepareChain, so (re)prepare it here with the same
     // capacity/factor arguments as the chain-wide oversampler. Cheap (three
     // small work buffers), and the swap-fade already has the wet path silent.
-    block.irBaseRateIsland.prepare(chainOversampleFactor.load(),
+    block.baseRateIsland.prepare(chainOversampleFactor.load(),
                                    juce::jmax(1, chainBaseBlockSize()));
 
     // Fresh blocks (Select-flow loads) default their mix by IR length: long

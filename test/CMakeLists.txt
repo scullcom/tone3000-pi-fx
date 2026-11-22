@@ -37,6 +37,7 @@ target_sources(DspTests PRIVATE
     src/ir_stereo_tests.cpp
     src/ir_temp_file_tests.cpp
     src/local_load_tests.cpp
+    src/lv2_chain_tests.cpp
     src/midi_map_tests.cpp
     src/multicore_tests.cpp
     src/nam_normalize_tests.cpp
@@ -66,6 +67,7 @@ target_sources(DspTests PRIVATE
     ../plugin/src/PresetManager.cpp
     ../plugin/src/Processor.cpp
     ../plugin/src/ProcessorChain.cpp
+    ../plugin/src/ProcessorLv2.cpp
     ../plugin/src/ProcessorHistory.cpp
     ../plugin/src/ProcessorModelLoader.cpp
     ../plugin/src/ProcessorPresets.cpp
@@ -114,6 +116,10 @@ target_compile_definitions(DspTests PRIVATE
     # drop-loaded local NAM files (same as plugin/CMakeLists.txt).
     NAM_ENABLE_A2_FAST
 )
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HEADLESS)
+    target_compile_definitions(DspTests PRIVATE T3K_ENABLE_LV2_HOST=1 JUCE_PLUGINHOST_LV2=1)
+endif()
 
 target_link_libraries(DspTests
     PRIVATE

@@ -34,7 +34,7 @@ void MainScreen::syncMeters() {
   // running in stereo) AND the rig can reproduce it (dualMonoActive and
   // stereoIrActive already imply that).
   outputMeter_.setStereo(((chain.stereoEnabled || spreadEnabled_.boolValue()) && chain.stereoOutput) ||
-                         chain.dualMonoActive || chain.stereoIrActive);
+                         chain.dualMonoActive || chain.stereoIrActive || chain.stereoEffectActive);
 }
 
 void MainScreen::resized() {

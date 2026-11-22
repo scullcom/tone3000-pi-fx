@@ -519,6 +519,7 @@ int TONE3000Processor::namEngineVoiceCount(const std::string& blockId) const {
 }
 
 TONE3000Processor::~TONE3000Processor() {
+  lv2Lifetime.reset();
   parameters.removeParameterListener("osEnabled", this);
   parameters.removeParameterListener("osFactor", this);
   for (const auto& paramId : presetParameterIds())
@@ -620,7 +621,7 @@ void TONE3000Processor::prepareChain(std::vector<std::unique_ptr<ChainBlock>>& b
     // (bypass at ×1). Prepared even while unloaded; a later engine apply
     // re-prepares anyway, this just keeps the invariant simple.
     if (block->type == ChainBlockType::IR)
-      block->irBaseRateIsland.prepare(chainOversampleFactor.load(),
+      block->baseRateIsland.prepare(chainOversampleFactor.load(),
                                       juce::jmax(1, chainBaseBlockSize()));
 
     // Initialize per-block smoothers (input gain, output gain, mix, NAM
@@ -645,6 +646,10 @@ void TONE3000Processor::prepareChain(std::vector<std::unique_ptr<ChainBlock>>& b
 
 void TONE3000Processor::prepareBlockForChainRate(ChainBlock& block) {
   const double chainRate = chainSampleRate();
+  if (block.type == ChainBlockType::LV2) {
+    block.baseRateIsland.prepare(chainOversampleFactor.load(), juce::jmax(1, chainBaseBlockSize()));
+    block.wetFadeGain.reset(chainRate, kWetFadeSeconds);
+  }
   block.eq.prepare(chainRate);
   block.spectrum.prepare(chainRate);
 }
@@ -1409,7 +1414,7 @@ void TONE3000Processor::processChainOnBuffer(std::vector<std::unique_ptr<ChainBl
         // pass at ×1). Linear processing gains nothing above the base rate;
         // this keeps IR CPU flat across oversampling factors and the IR
         // sound bit-identical to the non-oversampled chain.
-        block->irBaseRateIsland.processBaseRateIsland(
+        block->baseRateIsland.processBaseRateIsland(
             buffer.getArrayOfWritePointers(), numChannels, numSamples,
             [&convolver, numChannels](float* const* baseChannels, int baseFrames) {
               juce::dsp::AudioBlock<float> irBlock(baseChannels, static_cast<size_t>(numChannels),
@@ -1433,6 +1438,12 @@ void TONE3000Processor::processChainOnBuffer(std::vector<std::unique_ptr<ChainBl
       } catch (const std::exception& e) {
         DBG("Error in IR processing for block " << block->id << ": " << e.what());
       }
+    } else if (block->lv2Effect) {
+      block->baseRateIsland.processBaseRateIsland(
+          buffer.getArrayOfWritePointers(), numChannels, numSamples,
+          [&](float* const* channels, int frames) {
+            block->lv2Effect->process(channels, numChannels, frames, rtDualMono);
+          });
     }
 
     // EQ in the POST position (default): shapes the wet signal after the

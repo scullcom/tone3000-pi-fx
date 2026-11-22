@@ -2,9 +2,11 @@
 
 #include "GalleryGeometry.h"
 #include "core/Help.h"
+#include "core/Fonts.h"
 #include "core/Icons.h"
 #include "core/Paint.h"
 #include "core/Theme.h"
+#include "services/Lv2Artwork.h"
 
 namespace t3k::ui {
 
@@ -39,7 +41,12 @@ ToneTile::ToneTile(Services& services, const ChainItem& block, int size)
   addAndMakeVisible(chrome_);
   for (auto* b : {&power_, &swap_, &remove_}) chrome_.addAndMakeVisible(*b);
   power_.onClick = [this] { togglePower(); };
-  swap_.onClick = [this] { if (onSwap) onSwap(blockId()); };
+  swap_.onClick = [this] {
+    if (block_.isLv2)
+      pickLv2Effect(true);
+    else if (onSwap)
+      onSwap(blockId());
+  };
   remove_.onClick = [this] { this->services().chain.removeBlock(blockId()); };
 
   addAndMakeVisible(ledSlot_);
@@ -48,12 +55,14 @@ ToneTile::ToneTile(Services& services, const ChainItem& block, int size)
   addMouseListener(&hover_, true);
   services.pointer.addListener(this);
 
+  services.prefs.addListener(this);
   setBlock(block);
   setHovered(false);
   resized();  // the base set the size before these children existed
 }
 
 ToneTile::~ToneTile() {
+  services().prefs.removeListener(this);
   services().pointer.removeListener(this);
   removeMouseListener(&hover_);
 }
@@ -63,7 +72,23 @@ void ToneTile::setBlock(const ChainItem& block) {
   enabled_ = block.params.enabled;
   setHelpText(help::toneTile(block.tone.title));
   setTitle(block.tone.title);
-  image_.setTone(block.tone.image, block.tone.gear, block.tone.local, kGlyphSize);
+  if (block.isLv2) {
+    const auto key = lv2Artwork::preferenceKey(block.lv2Uri);
+    if (key != effectArtKey_) {
+      effectArtKey_ = key;
+      effectArt_ = lv2Artwork::load(services().prefs, block.lv2Uri);
+    }
+  } else {
+    effectArtKey_.clear();
+    effectArt_ = {};
+    image_.setTone(block.tone.image, block.tone.gear, block.tone.local, kGlyphSize);
+  }
+  swap_.setVisible(!block.isLv2 || services().backend.supportsLv2());
+  swap_.setEnabled(!block.isLv2 || !block.modelLoading);
+  if (block.isLv2) {
+    swap_.setTitle("Swap LV2 effect");
+    swap_.setHelpText("Choose a different LV2 effect for this slot.");
+  }
   syncState();
 }
 
@@ -73,13 +98,19 @@ void ToneTile::setBlock(const ChainItem& block) {
 void ToneTile::syncState() {
   const bool busy = block_.modelLoading || (!block_.loaded && !block_.loadFailed);
   const bool armed = dropArmed();
-  image_.setVisible(!armed);
+  image_.setVisible(!armed && !block_.isLv2);
   imageFade_.animateTo(enabled_ && !busy && !block_.loadFailed ? 1.0f : kDimmedImage, kImageFadeMs);
   dots_.setVisible(!armed && busy && !block_.loadFailed);
-  retry_.setVisible(!armed && block_.loadFailed);
+  retry_.setVisible(!armed && !block_.isLv2 && block_.loadFailed);
   chrome_.setVisible(!armed);
   ledSlot_.setVisible(!armed);
   power_.setOn(enabled_);
+  repaint();
+}
+
+void ToneTile::prefChanged(const juce::String& key) {
+  if (key != effectArtKey_) return;
+  effectArt_ = lv2Artwork::load(services().prefs, block_.lv2Uri);
   repaint();
 }
 
@@ -99,7 +130,8 @@ std::vector<ContextMenu::Item> ToneTile::menuItems() {
       {"Copy", Icon::Copy, help::Key::copyBlock,
        [this] { this->services().chain.copyBlock(blockId()); }},
   };
-  for (auto& item : localLoadItems()) items.push_back(std::move(item));
+  if (!block_.isLv2)
+    for (auto& item : localLoadItems()) items.push_back(std::move(item));
   return items;
 }
 
@@ -139,6 +171,27 @@ void ToneTile::resized() {
 
 void ToneTile::paint(juce::Graphics& g) {
   paint::fill(g, getLocalBounds().toFloat(), gallery::kTileCorner, theme::kSurface);
+  if (block_.isLv2) {
+    auto box = getLocalBounds().reduced(8).withTrimmedTop(kChromeHeight);
+    auto status = box.removeFromBottom(22);
+    g.setColour(theme::kWhite.withAlpha(enabled_ ? 1.0f : 0.45f));
+    g.setFont(Fonts::sans(14, true));
+    if (effectArt_.isValid() && !dropArmed()) {
+      auto title = box.removeFromBottom(24);
+      g.drawFittedText(block_.tone.title, title, juce::Justification::centred, 1);
+      g.setOpacity(enabled_ && !block_.loadFailed ? 1.0f : kDimmedImage);
+      g.drawImage(effectArt_, box.reduced(6).toFloat(), juce::RectanglePlacement::centred);
+      g.setOpacity(1.0f);
+    } else {
+      g.drawFittedText(block_.tone.title, box, juce::Justification::centred, 3);
+    }
+    g.setColour(theme::kGray);
+    g.setFont(Fonts::mono(10));
+    const auto label = block_.loadFailed
+                           ? (block_.lv2Error == "Effect is missing" ? "MISSING LV2" : "UNAVAILABLE")
+                           : "LV2 EFFECT";
+    g.drawText(label, status, juce::Justification::centred);
+  }
   if (dropArmed()) {
     const float s = gallery::kFileDropGlyphSize;
     Icons::draw(g, Icon::Upload, getLocalBounds().toFloat().withSizeKeepingCentre(s, s), theme::kGray);

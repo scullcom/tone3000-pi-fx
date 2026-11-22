@@ -136,10 +136,19 @@ ToneSummary parseTone(const juce::var& v) {
 ChainItem parseItem(const juce::var& v) {
   ChainItem item;
   item.blockId = str(v, "blockId").toStdString();
-  item.isInsert = str(v, "kind", "insert") != "tone";
+  const auto kind = str(v, "kind", "insert");
+  item.isLv2 = kind == "lv2";
+  item.isInsert = kind != "tone" && !item.isLv2;
   if (item.isInsert)
     return item;
   item.tone = parseTone(v["tone"]);
+  if (item.isLv2) {
+    item.lv2Uri = str(v, "lv2Uri");
+    item.lv2Error = str(v, "lv2Error");
+    item.tone.title = str(v, "lv2Name", item.lv2Uri);
+    if (item.tone.title.isEmpty()) item.tone.title = item.lv2Uri;
+    item.tone.format = "lv2";
+  }
   item.activeModelId = integer(v, "activeModelId");
   item.loaded = boolean(v, "loaded", false);
   item.loadFailed = boolean(v, "loadFailed", false);
@@ -175,6 +184,7 @@ ChainState ChainState::parse(const juce::var& v) {
   s.inputMode = inputModeFromString(str(v, "inputMode", "stereo"));
   s.dualMonoActive = boolean(v, "dualMonoActive");
   s.stereoIrActive = boolean(v, "stereoIrActive");
+  s.stereoEffectActive = boolean(v, "stereoEffectActive");
   s.namSlimSizeDefault = num(v, "namSlimSizeDefault", 0);
   s.multiCore = boolean(v, "multiCore", true);
   s.sampleRate = num(v, "sampleRate", 48000);

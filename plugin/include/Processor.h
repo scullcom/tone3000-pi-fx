@@ -243,6 +243,13 @@ public:
   // (normalized 0..1). Returns false for unknown blocks/params. Continuous
   // params defer their revision bump to the end of the gesture (see
   // deferredRevisionBump) so drag-rate calls never force full chain resyncs.
+  bool supportsLv2() const;
+  void scanLv2Effects(Lv2Effect::ScanCallback callback);
+  std::string addLv2Effect(const std::string& insertId, const juce::String& uri,
+                           const juce::String& name);
+  bool swapLv2Effect(const std::string& blockId, const juce::String& uri,
+                     Lv2Effect::LoadCallback finished);
+  juce::var getLv2Parameters(const std::string& blockId);
   bool setBlockParam(const std::string& blockId, const juce::String& param, double value);
 
   // Per-block NAM A2 size, in NAM's slimmable-size domain (0..1, clamped;
@@ -1091,6 +1098,11 @@ private:
   mutable juce::CriticalSection accessTokenMutex;
   
   // Thread pool for background model loading
+  // LV2 discovery jobs post non-blocking completion to the message thread.
+  std::shared_ptr<int> lv2Lifetime = std::make_shared<int>(0);
+  unsigned int nextLv2Load = 0;  // guarded by chainMutex
+  void queueLv2Load(ChainBlock& block, const juce::String& replacementUri = {},
+                    Lv2Effect::LoadCallback finished = {});
   juce::ThreadPool loadingThreadPool;
 
   int maxBlockSize = 0;

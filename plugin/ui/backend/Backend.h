@@ -42,6 +42,13 @@ public:
   virtual bool redoChain() = 0;
   virtual bool resetToDefault() = 0;
 
+  virtual bool supportsLv2() const { return false; }
+  virtual void scanLv2Effects(std::function<void(juce::var)> callback) { callback({}); }
+  virtual std::string addLv2Effect(const std::string&, const juce::String&, const juce::String&) { return {}; }
+  virtual bool swapLv2Effect(const std::string&, const juce::String&,
+                            std::function<void(const juce::String&)>) { return false; }
+  virtual juce::var getLv2Parameters(const std::string&) { return {}; }
+
   // Chain mutations
   // Returns the new block id, "" on failure.
   virtual std::string loadTone(const juce::String& toneJson, const std::string& targetInsertId) = 0;

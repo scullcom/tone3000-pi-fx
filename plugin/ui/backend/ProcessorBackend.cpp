@@ -43,6 +43,26 @@ juce::RangedAudioParameter* ProcessorBackend::parameter(const juce::String& id) 
 juce::var ProcessorBackend::getChainState(int knownRevision) {
   return processor_.getChainState(knownRevision);
 }
+bool ProcessorBackend::supportsLv2() const { return processor_.supportsLv2(); }
+
+void ProcessorBackend::scanLv2Effects(std::function<void(juce::var)> callback) {
+  processor_.scanLv2Effects(std::move(callback));
+}
+
+std::string ProcessorBackend::addLv2Effect(const std::string& id, const juce::String& uri,
+                                           const juce::String& name) {
+  return processor_.addLv2Effect(id, uri, name);
+}
+
+bool ProcessorBackend::swapLv2Effect(const std::string& id, const juce::String& uri,
+                                     std::function<void(const juce::String&)> finished) {
+  return processor_.swapLv2Effect(id, uri, std::move(finished));
+}
+
+juce::var ProcessorBackend::getLv2Parameters(const std::string& id) {
+  return processor_.getLv2Parameters(id);
+}
+
 juce::uint32 ProcessorBackend::chainRevision() { return processor_.getCurrentChainRevision(); }
 bool ProcessorBackend::undoChain() { return processor_.undoChain(); }
 bool ProcessorBackend::redoChain() { return processor_.redoChain(); }

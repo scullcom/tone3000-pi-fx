@@ -975,7 +975,7 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
   // can't stall the audio thread on lock contention.
   struct BlockRow {
     juce::String id;
-    bool isInsert = false;
+    bool isInsert = false, isLv2 = false;
     juce::var toneSummary;
     int toneId = 0;
     int activeModelId = 0;
@@ -988,12 +988,13 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
     juce::var eq;
     bool rtFailed = false;
     juce::String irImage;  // loaded IR blocks only
+    juce::String lv2Uri, lv2Name, lv2Error;
   };
 
   juce::uint32 revision = 0;
   std::vector<BlockRow> left, right;
   bool stereo = false, canUndo = false, canRedo = false, branched = false;
-  bool canPaste = false, atDefault = false, stereoIr = false;
+  bool canPaste = false, atDefault = false, stereoIr = false, stereoEffect = false;
   juce::String presetId, presetName, branchSide, activeSide, branchAfter;
 
   {
@@ -1052,6 +1053,13 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
           out.push_back(std::move(row));
           continue;
         }
+        row.isLv2 = block->type == ChainBlockType::LV2;
+        row.lv2Uri = block->lv2Uri;
+        row.lv2Name = block->lv2Name;
+        row.lv2Error = block->lv2Error;
+        if (block->loaded && block->enabled && block->lv2Effect && !stereo && !dualMono &&
+            stereoOut && i > lastNamIndex && block->lv2Effect->createsStereo())
+          stereoEffect = true;
         row.toneSummary = block->toneSummary;
         row.toneId = block->toneId;
         row.activeModelId = block->activeModelId;
@@ -1124,7 +1132,12 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
         continue;
       }
 
-      item->setProperty("kind", "tone");
+      item->setProperty("kind", row.isLv2 ? "lv2" : "tone");
+      if (row.isLv2) {
+        item->setProperty("lv2Uri", row.lv2Uri);
+        item->setProperty("lv2Name", row.lv2Name);
+        item->setProperty("lv2Error", row.lv2Error);
+      }
 
       // Slim tone summary, nested (not spread) so runtime fields never
       // collide with tone fields. Built once when the tone was set (see
@@ -1225,6 +1238,7 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
   // True while an enabled IR block runs in true stereo, so a mono chain puts
   // two different channels out. The UI shows stereo output meters.
   state->setProperty("stereoIrActive", stereoIr);
+  state->setProperty("stereoEffectActive", stereoEffect);
   // Machine-wide settings ride this payload because they change together
   // with a revision bump, like everything else Settings displays.
   state->setProperty("namSlimSizeDefault", namSlimSizeDefault.load());
@@ -1529,6 +1543,18 @@ bool TONE3000Processor::setBlockParam(const std::string& blockId, const juce::St
   ChainBlock* block = findBlockById(blockId);
   if (block == nullptr || block->type == ChainBlockType::INSERT)
     return false;
+
+  if (block->lv2Effect && param.startsWith("lv2:")) {
+    const auto id = param.substring(4);
+    if (!std::isfinite(value) || !block->lv2Effect->hasParameter(id))
+      return false;
+    pushChainHistory("param:" + juce::String(blockId) + ":" + param);
+    const auto normalised = juce::jlimit(0.0f, 1.0f, static_cast<float>(value));
+    block->lv2Settings[id] = normalised;
+    block->lv2Effect->setParameter(id, normalised);
+    deferredRevisionBump();
+    return true;
+  }
 
   // Validate before recording history, so failed calls never leave an entry.
   const bool isContinuous = param == "inputGain" || param == "outputGain" || param == "mix";

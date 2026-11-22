@@ -1,0 +1,86 @@
+diff --git a/modules/juce_audio_processors_headless/format_types/juce_LV2PluginFormatImpl.h b/modules/juce_audio_processors_headless/format_types/juce_LV2PluginFormatImpl.h
+index d6b941f..b983716 100644
+--- a/modules/juce_audio_processors_headless/format_types/juce_LV2PluginFormatImpl.h
++++ b/modules/juce_audio_processors_headless/format_types/juce_LV2PluginFormatImpl.h
+@@ -1621,6 +1621,7 @@ struct ParameterInfo
+ 
+     /*  This is the 'symbol' of a port, or the 'designation' of a parameter without a symbol. */
+     String identifier;
++    String unitSymbol;
+ 
+     float defaultValue = 0.0f, min = 0.0f, max = 1.0f;
+     bool isToggle = false, isInteger = false, isEnum = false;
+@@ -2502,10 +2503,11 @@ public:
+ 
+     StringArray getAllValueStrings() const override
+     {
+-        if (! info.isEnum)
+-            return {};
+-
+-        return AudioProcessorParameter::getAllValueStrings();
++        StringArray result;
++        if (info.isEnum)
++            for (const auto& point : info.scalePoints)
++                result.add (point.label);
++        return result;
+     }
+ 
+     String getText (float normalisedValue, int) const override
+@@ -2536,11 +2538,7 @@ public:
+         return name.substring (0, maxLength);
+     }
+ 
+-    String getLabel() const override
+-    {
+-        // TODO
+-        return {};
+-    }
++    String getLabel() const override { return info.unitSymbol; }
+ 
+ private:
+     String getFallbackParameterString (float denormalised) const
+@@ -3295,6 +3293,8 @@ static std::vector<ParameterData> getPortBasedParameters (World& world,
+     std::vector<ParameterData> result;
+ 
+     const auto groupNode = world.newUri (LV2_PORT_GROUPS__group);
++    const auto unitNode = world.newUri (LV2_UNITS__unit);
++    const auto symbolNode = world.newUri (LV2_UNITS__symbol);
+ 
+     for (auto& port : controlPorts)
+     {
+@@ -3307,7 +3307,16 @@ static std::vector<ParameterData> getPortBasedParameters (World& world,
+         const auto lilvPort = plugin.getPortByIndex (port.header.index);
+         const auto group = lilvNodeToUriString (lilvPort.get (groupNode.get()).get());
+ 
+-        result.push_back ({ port.info, ParameterWriter { &port }, group, port.header.name });
++        auto info = port.info;
++        const auto unit = lilvPort.get (unitNode.get());
++        if (const auto* node = unit.get(); node != nullptr)
++        {
++            const auto symbol = world.get (node, symbolNode.get(), nullptr);
++            if (const auto* value = symbol.get(); value != nullptr && lilv_node_is_string (value))
++                info.unitSymbol = String::fromUTF8 (lilv_node_as_string (value));
++        }
++
++        result.push_back ({ std::move (info), ParameterWriter { &port }, group, port.header.name });
+     }
+ 
+     return result;
+@@ -4223,6 +4232,7 @@ public:
+                 world->loadBundle (world->newFileUri (nullptr, pathString.toRawUTF8()));
+             }
+         }
++        world->loadSpecifications();
+     }
+ 
+     ~Pimpl()
+@@ -4323,6 +4333,9 @@ public:
+ 
+         FileSearchPath result { SystemStats::getEnvironmentVariable ("LV2_PATH", "").replace (":", ";") };
+         result.addPath (defaults);
++       #if JUCE_LINUX && defined (__aarch64__)
++        result.addPath (FileSearchPath { "/usr/lib/aarch64-linux-gnu/lv2;/usr/local/lib/aarch64-linux-gnu/lv2" });
++       #endif
+         return result;
+     }
+ 

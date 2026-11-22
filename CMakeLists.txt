@@ -178,6 +178,28 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     endif()
 endif()
 
+# Expose LV2 port units and named choices. Honour an explicit XDG config root
+# for standalone settings, presets, and the diagnostic log.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HEADLESS)
+    foreach(_juce_patch_name IN ITEMS juce-lv2-parameter-metadata juce-linux-xdg-config-home)
+        set(_juce_patch "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/${_juce_patch_name}.patch")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_juce_patch}")
+        execute_process(
+            COMMAND "${GIT_EXECUTABLE}" apply --ignore-space-change --reverse --check "${_juce_patch}"
+            WORKING_DIRECTORY "${LIB_DIR}/juce"
+            RESULT_VARIABLE _juce_already_applied
+            ERROR_QUIET
+        )
+        if (NOT _juce_already_applied STREQUAL "0")
+            execute_process(
+                COMMAND "${GIT_EXECUTABLE}" apply --ignore-space-change "${_juce_patch}"
+                WORKING_DIRECTORY "${LIB_DIR}/juce"
+                COMMAND_ERROR_IS_FATAL ANY
+            )
+        endif()
+    endforeach()
+endif()
+
 # iOS: the explicit-rate shortcut skips the normal scan's final rate
 # negotiation/readback. Pimpl starts at 44.1 kHz, so a 48 kHz USB route can
 # leave updateAvailableBufferSizes using a stale rate. Keep that final step

@@ -116,6 +116,8 @@ struct ToneSummary {
 struct ChainItem {
   std::string blockId;
   bool isInsert = true;
+  bool isLv2 = false;
+  juce::String lv2Uri, lv2Error;
 
   // Tone-block fields (unused for inserts).
   ToneSummary tone;
@@ -168,6 +170,7 @@ struct ChainState {
   // An enabled IR block is running in true stereo, so the output is stereo
   // even on a mono chain. The output meter splits while this is set.
   bool stereoIrActive = false;
+  bool stereoEffectActive = false;
   double namSlimSizeDefault = 0;
   bool multiCore = true;
   double sampleRate = 48000;

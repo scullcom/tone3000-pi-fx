@@ -35,7 +35,11 @@ public:
   void removeListener(Listener* l) { listeners.remove(l); }
 
   // Actions (each resyncs afterwards)
+  std::string addLv2Effect(const std::string& id, const juce::String& uri, const juce::String& name);
+
   // Add a tone at an insert slot; the new blockId, "" on failure.
+  bool swapLv2Effect(const std::string& id, const juce::String& uri,
+                     std::function<void(const juce::String&)> finished);
   std::string loadTone(const juce::String& toneJson, const std::string& targetInsertId = {});
   // Load a local .nam/.wav file or a folder of them ("" = success, else a
   // user-facing error).

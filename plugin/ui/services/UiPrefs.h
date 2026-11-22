@@ -39,6 +39,7 @@ public:
   // call it before acting on a value another host may have moved on
   // (the tokens).
   void sync();
+  juce::File settingsFile() const { return file_ != nullptr ? file_->getFile() : juce::File{}; }
 
   juce::String get(const juce::String& key, const juce::String& fallback = {}) const;
   bool getBool(const juce::String& key, bool fallback) const;

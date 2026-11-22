@@ -373,6 +373,7 @@ target_sources(${PROJECT_NAME}
         include/MidiMapper.h
         src/MidiMapper.cpp
         src/ProcessorChain.cpp
+        src/ProcessorLv2.cpp
         src/ProcessorHistory.cpp
         src/ProcessorPresets.cpp
         src/ProcessorState.cpp
@@ -482,6 +483,10 @@ target_include_directories(${PROJECT_NAME}
 # Defined here too because NAM is linked as a whole-archive flag on
 # macOS/Linux, which doesn't propagate the NAM target's definitions.
 target_compile_definitions(${PROJECT_NAME} PRIVATE NAM_ENABLE_A2_FAST)
+
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT HEADLESS)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE T3K_ENABLE_LV2_HOST=1 JUCE_PLUGINHOST_LV2=1)
+endif()
 
 # JUCE modules used
 target_link_libraries(${PROJECT_NAME}

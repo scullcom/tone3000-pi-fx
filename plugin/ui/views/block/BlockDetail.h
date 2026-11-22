@@ -53,6 +53,8 @@ private:
   juce::Component column_;
   std::unique_ptr<BackLink> back_;
   std::unique_ptr<BlockCard> card_;
+  class Lv2Controls;
+  std::unique_ptr<Lv2Controls> lv2_;
   bool infoOpen_ = false;
 };
 

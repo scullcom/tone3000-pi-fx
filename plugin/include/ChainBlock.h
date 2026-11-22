@@ -11,14 +11,16 @@
 #include "BlockSpectrum.h"
 #include "ChainOversampler.h"
 #include "NamEngine.h"
+#include "Lv2Effect.h"
 
 // Chain block types
-enum class ChainBlockType { NAM, IR, INSERT };
+enum class ChainBlockType { NAM, IR, INSERT, LV2 };
 
 inline juce::String chainBlockTypeToString(ChainBlockType type) {
   switch (type) {
     case ChainBlockType::NAM: return "nam";
     case ChainBlockType::INSERT: return "insert";
+    case ChainBlockType::LV2: return "lv2";
     case ChainBlockType::IR: break;
   }
   return "ir";
@@ -27,6 +29,7 @@ inline juce::String chainBlockTypeToString(ChainBlockType type) {
 inline ChainBlockType chainBlockTypeFromString(const juce::String& s) {
   if (s == "nam") return ChainBlockType::NAM;
   if (s == "insert") return ChainBlockType::INSERT;
+  if (s == "lv2") return ChainBlockType::LV2;
   return ChainBlockType::IR;
 }
 
@@ -107,6 +110,11 @@ struct ChainBlock {
   // Set together wherever toneJson is set; see setToneOnBlock.
   juce::var toneVar;
   juce::var toneSummary;
+
+  juce::String lv2Uri, lv2Name, lv2Error;
+  Lv2Effect::Settings lv2Settings;
+  std::shared_ptr<Lv2Effect> lv2Effect;
+  unsigned int lv2Load = 0;
 
   // Model cache: stores downloaded model data by model ID
   std::map<int, std::vector<uint8_t>> modelCache;
@@ -211,8 +219,9 @@ struct ChainBlock {
   // oversampled this island decimates the block's wet path to the base rate
   // around the convolver and interpolates back (linear processing gains
   // nothing from oversampling; its CPU scales ~quadratically with the rate).
+  // LV2 effects reuse the island to keep their native rate stable.
   // Bypass (zero-cost) at factor 1. See ChainOversampler.h.
-  ChainOversampler irBaseRateIsland;
+  ChainOversampler baseRateIsland;
   int irNumChannels{1};  // channels in the loaded IR file (1 or 2)
   // Off: a stereo IR runs its left channel on both sides. Chain state, on by
   // default; inert for mono IRs and NAM blocks.

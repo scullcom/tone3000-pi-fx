@@ -30,7 +30,10 @@ void AddTile::setRouting(Routing routing) {
 void AddTile::setCanPaste(bool canPaste) { canPaste_ = canPaste; }
 
 void AddTile::open() {
-  if (onAdd) onAdd(blockId());
+  if (services().backend.supportsLv2())
+    openMenu(getLocalBounds().getCentre());
+  else if (onAdd)
+    onAdd(blockId());
 }
 
 std::vector<ContextMenu::Item> AddTile::menuItems() {
@@ -38,6 +41,13 @@ std::vector<ContextMenu::Item> AddTile::menuItems() {
       {"Paste", Icon::ClipboardPaste, help::Key::pasteBlock,
        [this] { if (onPaste) onPaste(blockId()); }, /*disabled=*/!canPaste_},
   };
+  if (services().backend.supportsLv2()) {
+    items.insert(items.begin(), {
+        {"NAM / IR", Icon::PlusCircle, help::Key::addTile,
+         [this] { if (onAdd) onAdd(blockId()); }},
+        {"LV2 Effect", Icon::PlusCircle, help::Key::addTile, [this] { pickLv2Effect(); }},
+    });
+  }
   for (auto& item : localLoadItems()) items.push_back(std::move(item));
   return items;
 }

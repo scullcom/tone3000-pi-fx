@@ -68,6 +68,8 @@ protected:
   virtual void travellingChanged(bool /*travelling*/) {}
 
   bool dropArmed() const { return dropArmed_; }
+  void openMenu(juce::Point<int> at);
+  void pickLv2Effect(bool replace = false);
   bool menuOpen() const { return menu_ != nullptr && menu_->isOpen(); }
   Services& services() { return services_; }
 
@@ -85,7 +87,6 @@ private:
   // How long a set click suppression stays valid.
   static constexpr int kSuppressClickMs = 700;
 
-  void openMenu(juce::Point<int> at);
   void closeMenu();
   void setDropArmed(bool armed);
   TileDragHost* host();
@@ -101,6 +102,8 @@ private:
   juce::int64 menuDismissedMs_ = 0;
   DelayedCall hold_;
   std::unique_ptr<ContextMenu> menu_;
+  std::unique_ptr<Popover> effectPicker_;
+  bool scanningEffects_ = false;
 };
 
 }  // namespace t3k::ui

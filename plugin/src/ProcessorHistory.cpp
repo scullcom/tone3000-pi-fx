@@ -43,6 +43,10 @@ void TONE3000Processor::pushChainHistory(const juce::String& coalesceKey) {
 }
 
 void TONE3000Processor::queueActiveModelLoad(ChainBlock& block) {
+  if (block.type == ChainBlockType::LV2) {
+    queueLv2Load(block);
+    return;
+  }
   // Every bail below leaves the block unloadable, so flag it so the UI shows
   // the retry affordance instead of a loader that can never resolve, and log
   // at release level (these paths are the needle for "stuck loading after
@@ -135,7 +139,8 @@ void TONE3000Processor::reconcileChainFromTree(const juce::ValueTree& chainState
     std::unique_ptr<ChainBlock> block;
     auto it = existing.find(blockId);
     if (it != existing.end() && it->second->type == type &&
-        (type == ChainBlockType::INSERT || it->second->toneId == toneId)) {
+        (type == ChainBlockType::INSERT || it->second->toneId == toneId) &&
+        (type != ChainBlockType::LV2 || it->second->lv2Uri == blockState["lv2Uri"].toString())) {
       block = std::move(it->second);
       existing.erase(it);
     } else {
@@ -145,6 +150,13 @@ void TONE3000Processor::reconcileChainFromTree(const juce::ValueTree& chainState
     applyBlockSettings(*block, blockState);
 
     if (type == ChainBlockType::INSERT) {
+      target.push_back(std::move(block));
+      continue;
+    }
+
+    if (type == ChainBlockType::LV2) {
+      if (!block->loaded && !block->modelLoading)
+        queueLv2Load(*block);
       target.push_back(std::move(block));
       continue;
     }

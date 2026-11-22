@@ -18,7 +18,7 @@
 
 namespace t3k::ui {
 
-class ToneTile : public GalleryTile, private Pointer::Listener {
+class ToneTile : public GalleryTile, private Pointer::Listener, private UiPrefs::Listener {
 public:
   static constexpr int kChromeHeight = 32;
   static constexpr int kChromePad = 4;
@@ -40,6 +40,7 @@ public:
   void paint(juce::Graphics& g) override;
   void paintOverChildren(juce::Graphics& g) override;
   void resized() override;
+  bool isInterestedInFileDrag(const juce::StringArray&) override { return !block_.isLv2; }
 
 protected:
   void open() override;
@@ -69,12 +70,15 @@ private:
   void setHovered(bool hovered);
   void pointerChanged() override { setHovered(hovered_); }
   void syncState();
+  void prefChanged(const juce::String& key) override;
   void togglePower();
 
   ChainItem block_;
   bool enabled_ = true;  // optimistic; native converges via the resync
   bool hovered_ = false;
 
+  juce::Image effectArt_;
+  juce::String effectArtKey_;
   ToneImage image_;
   AlphaTween imageFade_{image_};
   LoadingDots dots_;

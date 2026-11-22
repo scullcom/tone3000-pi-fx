@@ -34,6 +34,16 @@ juce::String ChainStore::localLoadResult(const juce::var& res) {
   return error.isNotEmpty() ? error : "Couldn't load the file";
 }
 
+std::string ChainStore::addLv2Effect(const std::string& id, const juce::String& uri,
+                                     const juce::String& name) {
+  return run([&] { return backend_.addLv2Effect(id, uri, name); });
+}
+
+bool ChainStore::swapLv2Effect(const std::string& id, const juce::String& uri,
+                               std::function<void(const juce::String&)> finished) {
+  return run([&] { return backend_.swapLv2Effect(id, uri, std::move(finished)); });
+}
+
 std::string ChainStore::loadTone(const juce::String& toneJson, const std::string& targetInsertId) {
   return run([&] { return backend_.loadTone(toneJson, targetInsertId); });
 }

@@ -20,6 +20,7 @@ GalleryTile::GalleryTile(Services& services, std::string blockId, int size)
 GalleryTile::~GalleryTile() {
   // The menu lives on the overlay layer; take it down with the tile.
   if (menu_ != nullptr) menu_->close();
+  if (effectPicker_ != nullptr) effectPicker_->close();
 }
 
 TileDragHost* GalleryTile::host() { return findParentComponentOfClass<TileDragHost>(); }

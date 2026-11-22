@@ -1,0 +1,23 @@
+diff --git a/modules/juce_core/native/juce_Files_linux.cpp b/modules/juce_core/native/juce_Files_linux.cpp
+index 0d89b89..2de4f13 100644
+--- a/modules/juce_core/native/juce_Files_linux.cpp
++++ b/modules/juce_core/native/juce_Files_linux.cpp
+@@ -132,7 +132,17 @@ File File::getSpecialLocation (const SpecialLocationType type)
+         case userMoviesDirectory:             return resolveXDGFolder ("XDG_VIDEOS_DIR",    "~/Videos");
+         case userPicturesDirectory:           return resolveXDGFolder ("XDG_PICTURES_DIR",  "~/Pictures");
+         case userDesktopDirectory:            return resolveXDGFolder ("XDG_DESKTOP_DIR",   "~/Desktop");
+-        case userApplicationDataDirectory:    return resolveXDGFolder ("XDG_CONFIG_HOME",   "~/.config");
++        case userApplicationDataDirectory:
++        {
++            if (const auto* path = getenv ("XDG_CONFIG_HOME"); path != nullptr)
++            {
++                const auto config = String::fromUTF8 (path);
++                if (config.startsWithChar ('/'))
++                    return File (config);
++            }
++
++            return resolveXDGFolder ("XDG_CONFIG_HOME", "~/.config");
++        }
+         case commonDocumentsDirectory:
+         case commonApplicationDataDirectory:  return File ("/opt");
+         case globalApplicationsDirectory:     return File ("/usr");

@@ -22,6 +22,13 @@ public:
   juce::RangedAudioParameter* parameter(const juce::String& id) override;
 
   juce::var getChainState(int knownRevision) override;
+  bool supportsLv2() const override;
+  void scanLv2Effects(std::function<void(juce::var)> callback) override;
+  std::string addLv2Effect(const std::string& id, const juce::String& uri,
+                           const juce::String& name) override;
+  bool swapLv2Effect(const std::string& id, const juce::String& uri,
+                     std::function<void(const juce::String&)> finished) override;
+  juce::var getLv2Parameters(const std::string& id) override;
   juce::uint32 chainRevision() override;
   bool undoChain() override;
   bool redoChain() override;

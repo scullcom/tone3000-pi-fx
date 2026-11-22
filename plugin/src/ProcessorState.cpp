@@ -196,7 +196,18 @@ juce::ValueTree TONE3000Processor::serializeBlockSettings(const ChainBlock& bloc
   blockState.setProperty("outputGain", block.outputGainNormalized, nullptr);
   blockState.setProperty("mix", block.mixNormalized, nullptr);
 
-  if (block.type != ChainBlockType::INSERT) {
+  if (block.type == ChainBlockType::LV2) {
+    blockState.setProperty("lv2Uri", block.lv2Uri, nullptr);
+    blockState.setProperty("lv2Name", block.lv2Name, nullptr);
+    juce::ValueTree settings("Lv2Parameters");
+    for (const auto& [id, value] : block.lv2Settings) {
+      juce::ValueTree parameter("Param");
+      parameter.setProperty("id", id, nullptr);
+      parameter.setProperty("value", value, nullptr);
+      settings.appendChild(parameter, nullptr);
+    }
+    blockState.appendChild(settings, nullptr);
+  } else if (block.type != ChainBlockType::INSERT) {
     blockState.setProperty("toneId", block.toneId, nullptr);
     blockState.setProperty("toneJson", block.toneJson, nullptr);
     blockState.setProperty("activeModelId", block.activeModelId, nullptr);
@@ -223,7 +234,21 @@ void TONE3000Processor::applyBlockSettings(ChainBlock& block, const juce::ValueT
   if (block.namEngine != nullptr)
     block.namEngine->setSlimmableSize(block.namSlimSize);
 
-  if (block.type != ChainBlockType::INSERT) {
+  if (block.type == ChainBlockType::LV2) {
+    block.lv2Uri = blockState["lv2Uri"].toString();
+    block.lv2Name = blockState["lv2Name"].toString();
+    block.lv2Settings.clear();
+    for (const auto& parameter : blockState.getChildWithName("Lv2Parameters")) {
+      const auto id = parameter["id"].toString();
+      const auto value = static_cast<float>(parameter["value"]);
+      if (parameter.hasType("Param") && id.isNotEmpty() && std::isfinite(value))
+        block.lv2Settings[id] = juce::jlimit(0.0f, 1.0f, value);
+    }
+    if (block.lv2Effect)
+      block.lv2Effect->applySettings(block.lv2Settings);
+    else if (!block.modelLoading)
+      prepareBlockForChainRate(block);
+  } else if (block.type != ChainBlockType::INSERT) {
     // A missing Eq child restores as flat. The restored bands are then
     // designed for the live chain rate: this is the creation funnel for
     // duplicated, pasted and undo/preset-restored blocks, none of which
@@ -239,7 +264,7 @@ void TONE3000Processor::serializeChainToTree(
   for (const auto& block : blocks) {
     juce::ValueTree blockState = serializeBlockSettings(*block);
 
-    if (includeModelData && block->type != ChainBlockType::INSERT) {
+    if (includeModelData && (block->type == ChainBlockType::NAM || block->type == ChainBlockType::IR)) {
       juce::ValueTree cacheState("ModelCache");
       for (const auto& [modelId, modelData] : block->modelCache) {
         // Only models the block's tone still references are persisted: the
