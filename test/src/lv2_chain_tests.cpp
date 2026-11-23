@@ -112,6 +112,51 @@ TEST(Lv2ChainTest, MissingEffectPassesAudioAndRoundTripsPreset) {
   EXPECT_FLOAT_EQ(static_cast<float>(value), 0.625f);
 }
 
+TEST(Lv2ChainTest, GuitarixFrequencyLabelsKeepTheirPortIds) {
+  PresetDirectory presets;
+  auto proc = makeProcessor(presets.dir);
+  if (!proc->supportsLv2()) GTEST_SKIP() << "Requires a Linux LV2 host build";
+
+  const auto effects = std::make_shared<std::optional<juce::var>>();
+  proc->scanLv2Effects([effects](juce::var found) { effects->emplace(std::move(found)); });
+  ASSERT_TRUE(waitUntil([&] { return effects->has_value(); }));
+  const auto* installed = effects->value().getArray();
+  ASSERT_NE(installed, nullptr);
+  struct Control {
+    const char* pluginId;
+    const char* port;
+    const char* label;
+    const char* unit;
+  };
+  const Control cases[] = {
+      {"gx_graphiceq_#_graphiceq_", "sym:G2", "62.5 Hz", "dB"},
+      {"gx_barkgraphiceq_#_barkgraphiceq_", "sym:G24", "13.5 kHz", "dB"},
+      {"gx_shimmizita_#_shimmizita_", "sym:F1", "Low Frequency", "Hz"},
+  };
+  int checked = 0;
+  for (const auto& control : cases) {
+    const juce::String uri = juce::String("http://guitarix.sourceforge.net/plugins/") + control.pluginId;
+    const auto effect = std::find_if(installed->begin(), installed->end(), [&](const auto& row) {
+      return row["uri"].toString() == uri;
+    });
+    if (effect == installed->end()) continue;
+    const auto id = proc->addLv2Effect(emptySlot(*proc), uri, (*effect)["name"].toString());
+    ASSERT_FALSE(id.empty());
+    ASSERT_TRUE(waitUntil([&] { return !static_cast<bool>(rowFor(*proc, id)["modelLoading"]); }));
+    const auto parameters = proc->getLv2Parameters(id);
+    const auto* rows = parameters.getArray();
+    ASSERT_NE(rows, nullptr);
+    const auto port = std::find_if(rows->begin(), rows->end(), [&](const auto& row) {
+      return row["id"].toString() == control.port;
+    });
+    ASSERT_NE(port, rows->end());
+    EXPECT_EQ((*port)["name"].toString(), control.label);
+    EXPECT_EQ((*port)["unit"].toString(), control.unit);
+    ++checked;
+  }
+  if (checked == 0) GTEST_SKIP() << "Requires at least one of the Guitarix effects under test";
+}
+
 TEST(Lv2ChainTest, NativeDelayAndReverbRestoreSettingsAndProduceStereo) {
   PresetDirectory presets;
   auto proc = makeProcessor(presets.dir);

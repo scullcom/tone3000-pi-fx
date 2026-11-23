@@ -1,8 +1,56 @@
 #include "Processor.h"
 
 #include <cmath>
+#include <span>
 #include <utility>
 
+namespace {
+
+// Guitarix 0.46.0 keeps these labels in graphiceq.dsp, bark_freq_grid.h,
+// and the ShimmiZita editor. The LV2 port names only carry the symbols.
+constexpr const char* kGraphicBands[] = {
+    "Below 31.25 Hz", "62.5 Hz", "125 Hz", "250 Hz", "500 Hz", "1 kHz",
+    "2 kHz", "4 kHz", "8 kHz", "16 kHz", "Above 16 kHz"};
+constexpr const char* kBarkBands[] = {
+    "50 Hz", "150 Hz", "250 Hz", "350 Hz", "450 Hz", "570 Hz", "700 Hz", "840 Hz",
+    "1 kHz", "1.17 kHz", "1.37 kHz", "1.6 kHz", "1.85 kHz", "2.15 kHz", "2.5 kHz",
+    "2.9 kHz", "3.4 kHz", "4 kHz", "4.8 kHz", "5.8 kHz", "7 kHz", "8.5 kHz",
+    "10.5 kHz", "13.5 kHz"};
+constexpr const char* kShimmiFrequencies[] = {"Low Frequency", "High Frequency"};
+
+void labelGuitarixParameters(const juce::String& uri, juce::var& parameters) {
+  std::span<const char* const> labels;
+  const char* prefix = "G";
+  const char* unit = "dB";
+  if (uri == "http://guitarix.sourceforge.net/plugins/gx_graphiceq_#_graphiceq_") {
+    labels = kGraphicBands;
+  } else if (uri == "http://guitarix.sourceforge.net/plugins/gx_barkgraphiceq_#_barkgraphiceq_") {
+    labels = kBarkBands;
+  } else if (uri == "http://guitarix.sourceforge.net/plugins/gx_shimmizita_#_shimmizita_") {
+    labels = kShimmiFrequencies;
+    prefix = "F";
+    unit = "Hz";
+  } else {
+    return;
+  }
+
+  if (auto* rows = parameters.getArray()) {
+    for (auto& row : *rows) {
+      auto* control = row.getDynamicObject();
+      if (control == nullptr) continue;
+      const auto id = row["id"].toString();
+      const auto name = row["name"].toString();
+      const int index = name.substring(1).getIntValue() - 1;
+      if (index < 0 || static_cast<size_t>(index) >= labels.size() ||
+          name != prefix + juce::String(index + 1) || id != "sym:" + name)
+        continue;  // Keep descriptive names provided by newer plugin builds.
+      control->setProperty("name", labels[static_cast<size_t>(index)]);
+      if (row["unit"].toString().isEmpty()) control->setProperty("unit", unit);
+    }
+  }
+}
+
+}  // namespace
 
 Lv2Effect::Lv2Effect(std::unique_ptr<juce::AudioPluginInstance> primary,
                      std::unique_ptr<juce::AudioPluginInstance> second)
@@ -315,10 +363,16 @@ void TONE3000Processor::queueLv2Load(ChainBlock& block, const juce::String& repl
 
 juce::var TONE3000Processor::getLv2Parameters(const std::string& blockId) {
   std::shared_ptr<Lv2Effect> effect;
+  juce::String uri;
   {
     juce::ScopedLock lock(chainMutex);
-    if (const auto* block = findBlockById(blockId))
+    if (const auto* block = findBlockById(blockId)) {
       effect = block->lv2Effect;
+      uri = block->lv2Uri;
+    }
   }
-  return effect ? effect->parameters() : juce::var();
+  if (!effect) return {};
+  auto parameters = effect->parameters();
+  labelGuitarixParameters(uri, parameters);
+  return parameters;
 }
