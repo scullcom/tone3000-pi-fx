@@ -1,6 +1,19 @@
 # Changelog
 
-Notable changes to the TONE3000 FX Raspberry Pi desktop releases.
+Notable changes to the TONE3000 FX Raspberry Pi releases.
+
+## [1.2.0] - 2026-11-23
+
+### Added
+
+- **Mute Audio in Tuner** in System Settings silences the output while the tuner is open.
+- LV2 block settings now provide **Switch** and **Delete**, with artwork controls beside the effect name.
+- In kiosk mode, **Shut down Pi…** requests a graceful system shutdown with confirmation. The kiosk image saves the working session and audio settings before powering off.
+
+### Changed
+
+- Guitarix EQ controls show their verified frequencies. Stereo preamp, multiband, and other Guitarix controls use clearer labels where their meaning could be confirmed. Saved parameter IDs and values remain compatible.
+- TONE3000 skips Gx Tape Stereo on ARM and excludes GxTuner and GxDetune. Saved rigs retain those blocks and their settings, and audio passes through their slots.
 
 ## [1.1.0] - 2026-11-23
 
@@ -25,5 +38,6 @@ Notable changes to the TONE3000 FX Raspberry Pi desktop releases.
 - Search installed effects and keep a list of Favourites. Install Guitarix effects and matching pedal artwork, with the option to supply custom images.
 - TONE3000 catalogue sign-in and the offline **Clean Trem and Verb** factory demo.
 
+[1.2.0]: https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.2.0
 [1.1.0]: https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.1.0
 [1.0.0]: https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.0.0

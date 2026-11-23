@@ -1,12 +1,21 @@
 # TONE3000 FX for Raspberry Pi
 
-Play through NAM captures, cabinet impulse responses, and LV2 effects in one signal chain. This community fork keeps the TONE3000 standalone interface and adds native ARM64 LV2 hosting for Raspberry Pi.
+TONE3000 FX is a community fork of the TONE3000 standalone app for Raspberry Pi 5. It adds native ARM64 LV2 effects alongside NAM captures and cabinet impulse responses, preset banks that reuse the same MIDI footswitches, and a Raspberry Pi installer with an offline demo rig.
 
 **Powered by TONE3000** for browsing and loading tones. [TONE3000](https://www.tone3000.com) - [Original project](https://github.com/tone-3000/tone3000-plugin)
 
 **Downloads** — [Latest release](https://github.com/scullcom/tone3000-pi-fx/releases/latest) · [All releases](https://github.com/scullcom/tone3000-pi-fx/releases) · [Changelog](CHANGELOG.md)
 
 ![Clean amp, tremolo, and stereo reverb in the TONE3000 FX signal chain](docs/screenshots/pi-signal-chain.png)
+
+## What's new in v1.2.0
+
+- **Tune silently.** Turn on **Mute Audio in Tuner** under **Settings → System Settings**. The tuner still reads your guitar while the output is muted. Closing the tuner restores the output.
+- **Manage effects from the block view.** Open an LV2 block to change its controls, choose custom artwork beside the plugin name, or use **Switch** and **Delete** on the right. Switching keeps the effect in the same slot.
+- **Read Guitarix controls at a glance.** Graphic EQ and Bark Graphic EQ bands show their frequencies. Studio Preamp Stereo controls identify the left and right channels. Other verified Guitarix labels describe their controls more clearly, while existing presets retain their parameter values.
+- **Power down from the kiosk.** In the separate Raspberry Pi kiosk image, open the Settings and Login menu and choose **Shut down Pi…**. The kiosk saves the working session for the next boot. [Kiosk image and setup](https://github.com/scullcom/tone3000-pi-fx-image)
+
+Gx Tape Stereo is unavailable on ARM because it can crash the host. Use **GxTape** for the mono version. The picker also omits GxTuner and GxDetune. If an existing rig uses an unavailable effect, the block keeps its saved settings and passes audio through.
 
 ## Install
 
@@ -20,10 +29,10 @@ bash install.sh
 
 Run it as your regular desktop user. The installer uses `sudo` for missing system packages and builds the ARM64 standalone on your Pi. Choose **Yes** when it asks about Guitarix to get the effects used in the demo and their pedal artwork. The first build can take several minutes.
 
-If you already have Git, you can clone a release tag directly. Use `v1.0.0` for the original desktop release or `v1.1.0` for preset banks.
+If you already have Git, you can clone a release tag directly.
 
 ```sh
-git clone --branch v1.1.0 --recurse-submodules https://github.com/scullcom/tone3000-pi-fx.git
+git clone --branch v1.2.0 --recurse-submodules https://github.com/scullcom/tone3000-pi-fx.git
 cd tone3000-pi-fx
 bash install.sh
 ```
@@ -51,13 +60,13 @@ Open **Add - LV2 Effect**. **Favourites** is your shortlist. Select **Other inst
 
 ![The Other installed effects panel filtering the list as you type](docs/screenshots/pi-effect-search.png)
 
-Guitarix artwork is matched by plug-in ID and cached on the Pi. In an LV2 block's settings, **Choose image?** lets you import a PNG or JPEG for that effect. Blocks without artwork display their names. If a preset calls for a missing effect, the block shows which effect it needs and passes audio through until the plug-in is installed.
+Guitarix artwork is matched by plug-in ID and cached on the Pi. In an LV2 block's settings, **Choose image…** lets you import a PNG or JPEG for that effect. Blocks without artwork display their names. If a preset calls for a missing effect, the block shows which effect it needs and passes audio through until the plug-in is installed.
 
 For unattended installs, pass `--with-guitarix` or `--without-guitarix` to `install.sh`. If an image download fails, rerun with `--with-guitarix` to retry. To report a problem, include your Pi model, Raspberry Pi OS release, audio interface, and the relevant installer output.
 
 ## Preset banks
 
-Preset banks are available in [v1.1.0](https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.1.0). Open the preset picker and choose **New Bank** to create a named bank. Select the bank and choose **Save New Preset** to save the current rig there. Use reorder mode to drag presets within or between banks. The copy button creates an independent preset.
+Preset banks were introduced in [v1.1.0](https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.1.0). Open the preset picker and choose **New Bank** to create a named bank. Select the bank and choose **Save New Preset** to save the current rig there. Use reorder mode to drag presets within or between banks. The copy button creates an independent preset.
 
 MIDI Program Change slots start at **PC 0** in each bank and follow the preset order. Use the bank arrows in the picker or map **Next Bank** and **Previous Bank** to MIDI CC in **Settings → Plugin Settings → MIDI Mapping**. The current rig keeps playing when you change banks. The bank name appears red until you load one of its presets.
 
