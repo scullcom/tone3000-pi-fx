@@ -23,7 +23,7 @@
 
 namespace t3k::ui {
 
-class SystemSettingsPage : public FormStack, private AudioDeviceStore::Listener {
+class SystemSettingsPage : public FormStack, private AudioDeviceStore::Listener, private UiPrefs::Listener {
 public:
   // Brief "playing" state on the test button.
   static constexpr int kTestPlayingMs = 1200;
@@ -37,6 +37,7 @@ private:
   class ButtonPair;
 
   void audioDeviceChanged() override { sync(); }
+  void prefChanged(const juce::String& key) override;
   void sync();
   // Runs a device mutation; its error (if any) renders inline.
   template <typename Fn>
@@ -50,6 +51,7 @@ private:
   AlertCard inlineWarning_;
 
   ToggleRow hearYourself_;
+  ToggleRow muteAudioInTuner_;
   InlineBannerAlert feedbackRisk_{"feedback-risk"};
   InlineBannerAlert inputMuted_{"input-muted"};
 

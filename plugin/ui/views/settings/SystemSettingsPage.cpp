@@ -181,6 +181,7 @@ SystemSettingsPage::SystemSettingsPage(Services& services)
                    {{"Retry", [this] { apply([&] { return services_.audioDevice.restartDevice(); }); }}}),
       inlineWarning_(AlertVariant::warn, {}),
       hearYourself_("Hear Yourself", "Hear your instrument while playing."),
+      muteAudioInTuner_("Mute Audio in Tuner", "Silence the output while the tuner is open."),
       group_("Audio Interface", custom_icons::kAudioInterface),
       driver_("Audio Driver"),
       inputDevice_("Input Device", "The interface or microphone your instrument is plugged into."),
@@ -211,6 +212,9 @@ SystemSettingsPage::SystemSettingsPage(Services& services)
   hearYourself_.content().add(feedbackRisk_);
   hearYourself_.content().add(inputMuted_);
   add(hearYourself_);
+
+  muteAudioInTuner_.onChange = [this](bool muted) { services_.prefs.setBool(UiPrefs::kTunerMuted, muted); };
+  add(muteAudioInTuner_);
 
   // Audio interface card.
   driverSelect_.onChange = [this, &dev](const juce::String& t) { apply([&] { return dev.setDeviceType(t); }); };
@@ -278,10 +282,20 @@ SystemSettingsPage::SystemSettingsPage(Services& services)
   setTrailing(form::kSectionGap);
 
   dev.addListener(this);
+  services_.prefs.addListener(this);
+  prefChanged(UiPrefs::kTunerMuted);
   sync();
 }
 
-SystemSettingsPage::~SystemSettingsPage() { services_.audioDevice.removeListener(this); }
+SystemSettingsPage::~SystemSettingsPage() {
+  services_.prefs.removeListener(this);
+  services_.audioDevice.removeListener(this);
+}
+
+void SystemSettingsPage::prefChanged(const juce::String& key) {
+  if (key == UiPrefs::kTunerMuted)
+    muteAudioInTuner_.setValue(services_.prefs.getBool(UiPrefs::kTunerMuted, false));
+}
 
 // Errors from mutations render inline (never a modal); Retry reopens the
 // device, the standard recovery for "device in use" and panel weirdness.

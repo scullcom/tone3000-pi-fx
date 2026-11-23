@@ -83,19 +83,22 @@ TunerView::TunerView(Services& services)
     if (onClose) onClose();
   };
   addAndMakeVisible(close_);
-  mute_.onClick = [this] {
-    setMuted(!muted_);
-    prefs_.setBool(UiPrefs::kTunerMuted, muted_);
-  };
+  mute_.onClick = [this] { prefs_.setBool(UiPrefs::kTunerMuted, !muted_); };
   addAndMakeVisible(mute_);
-  setMuted(prefs_.getBool(UiPrefs::kTunerMuted, false));
+  prefs_.addListener(this);
+  prefChanged(UiPrefs::kTunerMuted);
   addAndMakeVisible(*up_);
   addAndMakeVisible(*down_);
   feed_.onChange = [this] { feedChanged(); };
   feedChanged();
 }
 
-TunerView::~TunerView() = default;
+TunerView::~TunerView() { prefs_.removeListener(this); }
+
+void TunerView::prefChanged(const juce::String& key) {
+  if (key == UiPrefs::kTunerMuted)
+    setMuted(prefs_.getBool(UiPrefs::kTunerMuted, false));
+}
 
 void TunerView::setMuted(bool muted) {
   muted_ = muted;

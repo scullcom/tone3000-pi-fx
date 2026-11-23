@@ -17,7 +17,7 @@
 
 namespace t3k::ui {
 
-class TunerView : public juce::Component {
+class TunerView : public juce::Component, private UiPrefs::Listener {
 public:
   // Bar panel from the idle-state SVG (50×181, inner edge running 30→151),
   // six per side at a 16 gap; 32 to the 120-wide centre column.
@@ -44,6 +44,7 @@ private:
   enum class Side { left, right };
 
   void feedChanged();
+  void prefChanged(const juce::String& key) override;
   void setMuted(bool muted);
   juce::Rectangle<int> readoutArea() const;
   void paintBars(juce::Graphics& g, Side side, juce::Rectangle<int> row, int litCount) const;
