@@ -170,6 +170,9 @@ juce::var TONE3000Processor::savePreset(const juce::String& rawName) {
     juce::ScopedLock lock(chainMutex);
     for (const auto& bank : banks)
       if (bank.id == activePresetBank) bankId = bank.id;
+    // A moved preset can share a name with a copy in this bank. Saving the
+    // active preset must update that file rather than the other copy.
+    preset.setProperty("id", activePresetId, nullptr);
   }
   const PresetManager::Info info = presetManager.save(name, preset, bankId, banks.size() > 1);
   if (info.id.isEmpty())

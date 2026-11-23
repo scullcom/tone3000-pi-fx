@@ -256,6 +256,13 @@ TEST(PresetManagerTest, BanksPersistOrderAndCopiesRemainIndependent) {
   EXPECT_EQ(fresh.load(original.id)["marker"].toString(), "original");
   EXPECT_EQ(fresh.load(copy)["marker"].toString(), "changed");
 
+  ASSERT_TRUE(fresh.moveToBank(original.id, pop, 0));
+  auto edit = makePreset("edited original");
+  edit.setProperty("id", original.id, nullptr);
+  EXPECT_EQ(fresh.save("Clean", edit, pop, true).id, original.id);
+  EXPECT_EQ(fresh.load(original.id)["marker"].toString(), "edited original");
+  EXPECT_EQ(fresh.load(copy)["marker"].toString(), "changed");
+  ASSERT_TRUE(fresh.moveToBank(original.id, rock, 1));
   ASSERT_TRUE(fresh.deleteBank(rock));
   EXPECT_FALSE(fresh.load(original.id).isValid());
   EXPECT_FALSE(fresh.load(lead.id).isValid());

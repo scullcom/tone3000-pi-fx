@@ -624,6 +624,7 @@ void PresetBar::BrowsePanel::editBankName(std::optional<PresetBankInfo> bank) {
         }
         safe->openBrowsePanel();
       }));
+  if (auto* name = dialog->getTextEditor("name")) name->grabKeyboardFocus();
 }
 
 void PresetBar::BrowsePanel::confirmDeleteBank(const PresetBankInfo& bank) {

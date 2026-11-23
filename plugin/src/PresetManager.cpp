@@ -486,12 +486,15 @@ PresetManager::Info PresetManager::save(const juce::String& name, juce::ValueTre
   auto records = banked ? banks() : std::vector<Bank>{};
   auto bank = std::find_if(records.begin(), records.end(), [&](const auto& item) { return item.id == bankId; });
   if (banked && bank == records.end()) return {};
+  const auto preferred = banked ? preset["id"].toString() : juce::String();
   for (const Entry& existing : entries()) {
     if (!existing.info.factory && (!banked || bank->presets.contains(existing.info.id)) &&
         existing.info.name.compareIgnoreCase(name) == 0) {
-      current = existing.file;
-      rawId = stripPrefix(existing.info.id, kUserPrefix);
-      break;
+      if (rawId.isEmpty() || existing.info.id == preferred) {
+        current = existing.file;
+        rawId = stripPrefix(existing.info.id, kUserPrefix);
+      }
+      if (preferred.isEmpty() || existing.info.id == preferred) break;
     }
   }
   if (rawId.isEmpty())
