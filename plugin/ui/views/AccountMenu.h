@@ -59,9 +59,11 @@ private:
     ProfileRow profile;
     MenuRow login{"Login", Icon::LogIn};
     MenuRow logout{"Logout", Icon::LogOut};
+    MenuRow shutdown{"Shut down Pi...", Icon::Power};
   };
 
   void updateProfileRow();
+  void confirmShutdown();
 
   Avatar avatar_;
   Menu menu_;

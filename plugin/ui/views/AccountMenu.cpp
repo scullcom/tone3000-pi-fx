@@ -53,11 +53,12 @@ AccountMenu::Menu::Menu() {
   addChildComponent(profile);
   addChildComponent(login);
   addChildComponent(logout);
+  addChildComponent(shutdown);
   relayout();
 }
 
 void AccountMenu::Menu::relayout() {
-  const int rows = profile.isVisible() ? 3 : 2;
+  const int rows = 2 + static_cast<int>(profile.isVisible()) + static_cast<int>(shutdown.isVisible());
   setSize(kMenuMinWidth, kBorder * 2 + kMenuPad * 2 + MenuRow::kHeight * rows);
   resized();
 }
@@ -75,6 +76,7 @@ void AccountMenu::Menu::resized() {
   const auto second = area.removeFromTop(MenuRow::kHeight);
   login.setBounds(second);
   logout.setBounds(second);
+  if (shutdown.isVisible()) shutdown.setBounds(area.removeFromTop(MenuRow::kHeight));
 }
 
 // Pill
@@ -106,10 +108,48 @@ AccountMenu::AccountMenu() : Clickable({}) {
     menu_.close();
     if (onLogout) onLogout();
   };
+#if JUCE_LINUX
+  if (juce::JUCEApplicationBase::isStandaloneApp() &&
+      juce::SystemStats::getEnvironmentVariable("T3K_KIOSK", {}) == "1") {
+    menu_.shutdown.setVisible(true);
+    menu_.shutdown.onClick = [this] { confirmShutdown(); };
+    menu_.relayout();
+  }
+#endif
   setAuthenticated(false);
 }
 
 AccountMenu::~AccountMenu() { menu_.close(); }
+
+void AccountMenu::confirmShutdown() {
+#if JUCE_LINUX
+  menu_.close();
+  const auto safe = juce::Component::SafePointer<AccountMenu>(this);
+  juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::QuestionIcon,
+      "Shut down Pi?", "The current rig and audio settings will be restored at the next boot.",
+      "Shut down", "Cancel", getTopLevelComponent(), juce::ModalCallbackFunction::create([safe](int confirmed) {
+        if (!safe || !confirmed) return;
+        safe->menu_.shutdown.setEnabled(false);
+        juce::Thread::launch([safe] {
+          // Request normal logind shutdown so the kiosk service can save the session on exit.
+          juce::ChildProcess process;
+          const juce::StringArray command{"/usr/bin/busctl", "--system", "--timeout=8s", "call",
+                                         "org.freedesktop.login1", "/org/freedesktop/login1",
+                                         "org.freedesktop.login1.Manager", "PowerOff", "b", "false"};
+          if (process.start(command) && process.waitForProcessToFinish(10000) && process.getExitCode() == 0)
+            return;
+          process.kill();
+          juce::MessageManager::callAsync([safe] {
+            if (!safe) return;
+            safe->menu_.shutdown.setEnabled(true);
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Could not shut down", "Raspberry Pi OS did not accept the power-off request.", "OK",
+                safe->getTopLevelComponent());
+          });
+        });
+      }));
+#endif
+}
 
 void AccountMenu::setAuthenticated(bool authenticated) {
   authenticated_ = authenticated;
