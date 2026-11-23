@@ -26,9 +26,11 @@ public:
   void setAuthenticated(bool authenticated);
   void setUsername(const juce::String& username);
   void setAvatar(ImageLoader& images, const juce::String& url);
+  void setPresetTransferAvailable(bool available);
   void openMenu();
 
   std::function<void()> onOpenProfile, onOpenSettings, onLogin, onLogout;
+  std::function<void(bool importing)> onPresetTransfer;
 
   void paintButton(juce::Graphics& g, bool highlighted, bool down) override;
   void resized() override;
@@ -59,6 +61,8 @@ private:
     ProfileRow profile;
     MenuRow login{"Login", Icon::LogIn};
     MenuRow logout{"Logout", Icon::LogOut};
+    MenuRow exportPresets{"Export", Icon::Upload};
+    MenuRow importPresets{"Import", Icon::Download};
     MenuRow shutdown{"Shut down Pi...", Icon::Power};
   };
 

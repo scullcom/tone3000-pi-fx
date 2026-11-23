@@ -158,6 +158,7 @@ public:
   // open (iOS); the UI hides the section.
   virtual bool canOpenPresetsFolder() = 0;
   virtual bool openPresetsFolder() = 0;
+  virtual juce::File presetBackupSource() const { return {}; }
   // False when the platform has no settings URI (the UI hides the button).
   virtual bool canOpenDateTimeSettings() = 0;
   virtual bool openDateTimeSettings() = 0;

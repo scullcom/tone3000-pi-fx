@@ -324,6 +324,13 @@ bool ProcessorBackend::canOpenPresetsFolder() {
 #endif
 }
 
+juce::File ProcessorBackend::presetBackupSource() const {
+#if JUCE_LINUX
+  if (juce::JUCEApplicationBase::isStandaloneApp()) return processor_.getUserPresetsDir();
+#endif
+  return {};
+}
+
 bool ProcessorBackend::openPresetsFolder() {
   const juce::File dir = processor_.getUserPresetsDir();
   // A fresh install has no folder until the first save; make it so the

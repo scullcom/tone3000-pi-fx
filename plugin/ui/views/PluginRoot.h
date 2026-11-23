@@ -55,6 +55,7 @@
 #include "browser/ToneBrowser.h"
 #include "core/DelayedCall.h"
 #include "modals/ConnectionModal.h"
+#include "modals/PresetTransferDialog.h"
 #include "modals/UpdateNotice.h"
 #include "settings/SettingsScreen.h"
 #include "services/Services.h"
@@ -149,6 +150,7 @@ private:
   // Loading a preset / resetting replaces the chain: leave any takeover.
   void showChainThen(const std::function<void()>& fn);
   void logout();
+  void openPresetTransfer(bool importing);
   // Which of main screen, faceplate, browser and sign-in screen show under
   // the takeovers.
   void syncTakeovers();
@@ -175,6 +177,7 @@ private:
   ToastView toast_;
   std::unique_ptr<UpdateNotice> updateNotice_;
   std::unique_ptr<ConnectionModal> connectionModal_;
+  std::unique_ptr<PresetTransferDialog> presetTransfer_;
   HintTracker hintTracker_;
   PointerTracker pointerTracker_;
   bool hintsVisible_ = true;

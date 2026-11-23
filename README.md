@@ -72,6 +72,14 @@ MIDI Program Change slots start at **PC 0** in each bank and follow the preset o
 
 Use a bank's pencil to rename it. Confirming **Delete Bank** deletes the bank and the presets in it. To back up your banks, keep the entire **Presets** folder, including `banks.json`.
 
+## USB preset backups
+
+On the `preset_io` branch, choose **Export** or **Import** in the Settings and Login menu. Insert a USB drive and tick individual user presets or a bank to select everything in it. The backup uses `/Tone3000-pi-fx/presets` on the USB drive. Exporting replaces the contents of that folder after the new backup has been written.
+
+Import merges banks with the same name and replaces matching preset names within each destination bank. Name matching is case-insensitive. New banks and presets are added, and factory presets are excluded. Existing presets elsewhere stay in their own banks.
+
+The Pi installer includes UDisks for mounting removable drives. To use this branch in a custom kiosk image, include `udisks2` and install `resources/kiosk/49-tone3000-preset-usb.rules` under `/etc/polkit-1/rules.d/` as root. The rule is limited to mounting removable USB filesystems for the `tone-kiosk` account.
+
 ## Credits and licences
 
 - The **TONE3000 team** created the original app, its native interface, and the catalog integration. [Upstream source and licence](https://github.com/tone-3000/tone3000-plugin)

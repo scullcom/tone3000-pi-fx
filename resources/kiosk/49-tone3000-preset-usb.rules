@@ -1,0 +1,8 @@
+polkit.addRule(function (action, subject) {
+    if (subject.user === "tone-kiosk" && action.lookup("drive.removable.bus") === "usb" &&
+        action.lookup("id.usage") === "filesystem" &&
+        (action.id === "org.freedesktop.udisks2.filesystem-mount" ||
+         action.id === "org.freedesktop.udisks2.filesystem-mount-other-seat")) {
+        return polkit.Result.YES;
+    }
+});

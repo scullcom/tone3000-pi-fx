@@ -78,6 +78,10 @@ PluginHeader::PluginHeader(Services& services)
   account_.onLogout = [this] {
     if (onLogout) onLogout();
   };
+  account_.setPresetTransferAvailable(services_.backend.presetBackupSource() != juce::File{});
+  account_.onPresetTransfer = [this](bool importing) {
+    if (onPresetTransfer) onPresetTransfer(importing);
+  };
   addAndMakeVisible(account_);
 
   services_.chain.addListener(this);

@@ -5,6 +5,7 @@
 // issue #76).
 #include "Processor.h"
 #include <algorithm>
+#include <filesystem>
 #include <limits>
 
 namespace presetfile = t3k::presetfile;
@@ -18,6 +19,13 @@ juce::File presetsRootDir() { return t3k::appdata::root().getChildFile("Presets"
 
 juce::String stripPrefix(const juce::String& id, const char* prefix) {
   return id.fromFirstOccurrenceOf(prefix, false, false);
+}
+
+void removeBackupDirectory(const juce::File& dir) {
+  std::error_code error;
+  // remove_all removes symbolic links themselves, even inside the old backup.
+  std::filesystem::remove_all(std::filesystem::u8path(dir.getFullPathName().toRawUTF8()), error);
+  if (error) juce::Logger::writeToLog("[Presets] Could not remove " + dir.getFullPathName());
 }
 
 }  // namespace
@@ -114,7 +122,7 @@ juce::File PresetManager::writeUserPreset(const juce::File& dir, const juce::Fil
 std::vector<PresetManager::Entry> PresetManager::scanDir(const juce::File& dir, const char* prefix,
                                                          bool factory, ScanState& state) const {
   std::vector<Entry> out;
-  if (!dir.isDirectory())
+  if (!dir.isDirectory() || (ignoreFactoryAndLinks && factory))
     return out;
 
   // Stem order, so which of two files claiming one id keeps it (below) does
@@ -127,6 +135,7 @@ std::vector<PresetManager::Entry> PresetManager::scanDir(const juce::File& dir, 
 
   std::set<juce::String> idsInDir;
   for (const auto& file : files) {
+    if (ignoreFactoryAndLinks && file.isSymbolicLink()) continue;
     // Same (mtime, size) as last time: the id/name are what we read then.
     // Every write goes through write-then-rename (presetfile::write), so any
     // change to a preset moves at least its mtime. A never-seen path gets a
@@ -373,6 +382,157 @@ bool PresetManager::writeBanks(const std::vector<Bank>& banks) const {
     records.add(juce::var(record));
   }
   return userDir.getChildFile("banks.json").replaceWithText(juce::JSON::toString(records));
+}
+
+juce::File PresetManager::usbBackupFolder(const juce::File& drive) {
+  return drive.getChildFile("Tone3000-pi-fx/presets");
+}
+
+bool PresetManager::safeUsbBackup(const juce::File& drive) {
+  if (drive == juce::File() || !drive.isDirectory() || drive.isSymbolicLink()) return false;
+  const auto backup = usbBackupFolder(drive);
+  for (const auto& folder : {backup.getParentDirectory(), backup})
+    if (folder.isSymbolicLink() || (folder.exists() && !folder.isDirectory())) return false;
+  return !backup.getChildFile("banks.json").isSymbolicLink() &&
+         !backup.getChildFile("order.json").isSymbolicLink();
+}
+
+std::vector<PresetManager::TransferGroup> PresetManager::usbBackupGroups(const juce::File& drive) {
+  if (!safeUsbBackup(drive) || !usbBackupFolder(drive).isDirectory()) return {};
+  PresetManager backup(usbBackupFolder(drive));
+  backup.ignoreFactoryAndLinks = true;
+  return backup.transferGroups();
+}
+
+std::vector<PresetManager::TransferGroup> PresetManager::transferGroups() const {
+  std::map<juce::String, Info> byId;
+  for (const auto& preset : list())
+    if (!preset.factory) byId.emplace(preset.id, preset);
+  std::vector<TransferGroup> groups;
+  for (const auto& bank : banks()) {
+    TransferGroup group{bank.id, bank.name, {}};
+    for (const auto& id : bank.presets)
+      if (const auto it = byId.find(id); it != byId.end()) group.presets.push_back(it->second);
+    if (group.id.isNotEmpty() || !group.presets.empty()) groups.push_back(std::move(group));
+  }
+  return groups;
+}
+
+PresetManager::TransferResult PresetManager::exportUsbBackup(
+    const juce::File& drive, const TransferSelection& selection,
+    const std::function<bool()>& driveStillMounted) const {
+  const auto target = usbBackupFolder(drive);
+  if (!driveStillMounted() || !safeUsbBackup(drive) || target == userDir ||
+      userDir.isAChildOf(target) || target.isAChildOf(userDir))
+    return {0, "The USB backup folder is unavailable."};
+  if (selection.banks.isEmpty() && selection.presets.isEmpty()) return {0, "Select something to export."};
+  const auto parent = target.getParentDirectory();
+  const auto stage = parent.getChildFile(".preset-backup-" + juce::Uuid().toString());
+  if (stage.createDirectory().failed()) return {0, "Could not create the backup on this USB drive."};
+
+  auto failed = [&](juce::String error) -> TransferResult {
+    if (driveStillMounted()) removeBackupDirectory(stage);
+    return {0, std::move(error)};
+  };
+  std::map<juce::String, juce::File> files;
+  for (const auto& entry : entries())
+    if (!entry.info.factory) files.emplace(entry.info.id, entry.file);
+  auto records = banks();
+  int copied = 0;
+  juce::StringArray copiedIds;
+  for (auto& record : records) {
+    juce::StringArray picked;
+    const bool wholeBank = selection.banks.contains(record.id);
+    for (const auto& id : record.presets) {
+      if (!wholeBank && !selection.presets.contains(id)) continue;
+      const auto file = files.find(id);
+      if (file == files.end()) return failed("A selected preset is no longer available.");
+      auto preset = presetfile::read(file->second);
+      if (!preset.isValid()) return failed("Could not read " + file->second.getFileName() + ".");
+      preset.setProperty("id", stripPrefix(id, kUserPrefix), nullptr);
+      const auto destination = presetfile::uniqueFile(stage, file->second.getFileNameWithoutExtension());
+      if (!presetfile::write(destination, preset))
+        return failed("Could not copy a selected preset to the USB drive.");
+      picked.add(id);
+      copiedIds.add(id);
+      ++copied;
+    }
+    record.presets = std::move(picked);
+  }
+  std::erase_if(records, [&](const auto& bank) {
+    return bank.id.isNotEmpty() && bank.presets.isEmpty() && !selection.banks.contains(bank.id);
+  });
+  if (std::any_of(selection.presets.begin(), selection.presets.end(), [&](const auto& id) {
+        return !copiedIds.contains(id);
+      }) ||
+      std::any_of(selection.banks.begin(), selection.banks.end(), [&](const auto& id) {
+        return std::none_of(records.begin(), records.end(), [&](const auto& bank) { return bank.id == id; });
+      })) return failed("Your presets changed. Reopen Export and select them again.");
+  if (!PresetManager(stage).writeBanks(records) || !driveStillMounted())
+    return failed("Could not finish writing the backup to the USB drive.");
+
+  const auto previous = parent.getChildFile(".previous-presets-" + juce::Uuid().toString());
+  const bool hadBackup = target.isDirectory();
+  if (hadBackup && !target.moveFileTo(previous)) return failed("Could not replace the existing backup.");
+  if (!stage.moveFileTo(target)) {
+    if (hadBackup && !previous.moveFileTo(target))
+      return failed("Could not replace the backup. The previous backup is in " + previous.getFileName() + ".");
+    return failed("Could not finish replacing the backup.");
+  }
+  if (hadBackup) removeBackupDirectory(previous);
+  return {copied, {}};
+}
+
+PresetManager::TransferResult PresetManager::importUsbBackup(
+    const juce::File& drive, const TransferSelection& selection,
+    const std::function<bool()>& driveStillMounted) const {
+  const auto source = usbBackupFolder(drive);
+  if (!driveStillMounted() || !safeUsbBackup(drive) || !source.isDirectory() || source == userDir)
+    return {0, "The USB backup folder is unavailable."};
+  if (selection.banks.isEmpty() && selection.presets.isEmpty()) return {0, "Select something to import."};
+  PresetManager backup(source);
+  backup.ignoreFactoryAndLinks = true;
+  const auto groups = backup.transferGroups();
+  const auto verifySelection = [&](const auto& ids, const auto& contains) {
+    return std::all_of(ids.begin(), ids.end(), [&](const auto& id) {
+      return std::any_of(groups.begin(), groups.end(), [&](const auto& group) { return contains(group, id); });
+    });
+  };
+  if (!verifySelection(selection.banks, [](const auto& group, const auto& id) { return group.id == id; }) ||
+      !verifySelection(selection.presets, [](const auto& group, const auto& id) {
+        return std::any_of(group.presets.begin(), group.presets.end(), [&](const auto& preset) { return preset.id == id; });
+      })) return {0, "The backup changed. Reopen Import and select the presets again."};
+
+  int imported = 0;
+  for (const auto& group : groups) {
+    const bool wholeBank = selection.banks.contains(group.id);
+    if (!wholeBank && std::none_of(group.presets.begin(), group.presets.end(),
+        [&](const auto& preset) { return selection.presets.contains(preset.id); })) continue;
+    if (!driveStillMounted()) return {imported, "The USB drive was removed."};
+    juce::String targetId;
+    if (group.id.isNotEmpty()) {
+      auto records = banks();
+      const auto existing = std::find_if(records.begin() + 1, records.end(), [&](const auto& bank) {
+        return bank.name.equalsIgnoreCase(group.name);
+      });
+      if (existing != records.end()) {
+        targetId = existing->id;
+      } else {
+        targetId = juce::Uuid().toString();
+        records.push_back({targetId, group.name, {}});
+        if (!writeBanks(records)) return {imported, "Could not create bank: " + group.name};
+      }
+    }
+    for (const auto& info : group.presets) {
+      if (!wholeBank && !selection.presets.contains(info.id)) continue;
+      auto preset = backup.load(info.id);
+      if (!preset.isValid()) return {imported, "Could not read preset: " + info.name};
+      if (save(info.name, std::move(preset), targetId, true).id.isEmpty())
+        return {imported, "Could not save preset: " + info.name};
+      ++imported;
+    }
+  }
+  return {imported, {}};
 }
 
 bool PresetManager::createBank(const juce::String& name) const {

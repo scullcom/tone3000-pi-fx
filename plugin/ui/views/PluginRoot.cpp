@@ -58,6 +58,7 @@ PluginRoot::PluginRoot(Services& services)
   services_.session.onAuthenticated = [this] { setBrowserShown(true); };
 
   header_.onOpenSettings = [this] { openSettings(); };
+  header_.onPresetTransfer = [this](bool importing) { openPresetTransfer(importing); };
 
   addAndMakeVisible(header_);
   addAndMakeVisible(main_);
@@ -129,6 +130,23 @@ std::unique_ptr<Modal> PluginRoot::openModal(Args&&... args) {
 void PluginRoot::restackModals() {
   if (updateNotice_) updateNotice_->toFront(false);
   if (connectionModal_) connectionModal_->toFront(false);
+  if (presetTransfer_) presetTransfer_->toFront(false);
+}
+
+void PluginRoot::openPresetTransfer(bool importing) {
+  const auto directory = services_.backend.presetBackupSource();
+  if (directory == juce::File{} || presetTransfer_) return;
+  presetTransfer_ = openModal<PresetTransferDialog>(directory, importing);
+  presetTransfer_->onClose = [this] {
+    juce::MessageManager::callAsync([safe = juce::Component::SafePointer<PluginRoot>(this)] {
+      if (safe) safe->presetTransfer_.reset();
+    });
+  };
+  presetTransfer_->onImported = [this] {
+    services_.presets.refresh();
+    services_.chain.refresh();
+  };
+  restackModals();
 }
 
 // The sign-in screen is up exactly while the flow is not idle; the screen
@@ -305,12 +323,12 @@ bool PluginRoot::FocusPolicy::keyPressed(const juce::KeyPress& key, juce::Compon
 
 SettingsScreen* PluginRoot::settingsInFront() const {
   // A modal over the page takes the keyboard with it.
-  if (updateNotice_ != nullptr || connectionModal_ != nullptr) return nullptr;
+  if (updateNotice_ || connectionModal_ || presetTransfer_) return nullptr;
   return settings_.get();
 }
 
 DragScroller* PluginRoot::frontScroller() {
-  if (updateNotice_ != nullptr || connectionModal_ != nullptr) return nullptr;  // behind a scrim: nothing moves
+  if (updateNotice_ || connectionModal_ || presetTransfer_) return nullptr;  // behind a scrim: nothing moves
   if (settings_ != nullptr) return &settings_->scroller();
   if (tunerShown() || signInShown()) return nullptr;  // neither screen scrolls
   if (browserShown()) return &browser_->scroller();
@@ -471,7 +489,8 @@ void PluginRoot::closeSettings() {
 void PluginRoot::resized() {
   overlay_.setBounds(getLocalBounds());
   if (settings_ != nullptr) settings_->setBounds(getLocalBounds());
-  for (auto* modal : {static_cast<ModalLayer*>(updateNotice_.get()), static_cast<ModalLayer*>(connectionModal_.get())})
+  for (auto* modal : {static_cast<ModalLayer*>(updateNotice_.get()), static_cast<ModalLayer*>(connectionModal_.get()),
+                      static_cast<ModalLayer*>(presetTransfer_.get())})
     if (modal != nullptr) modal->setBounds(getLocalBounds());
 
   // The banner strip, then the content column at its full height (the core

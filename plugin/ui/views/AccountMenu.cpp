@@ -53,12 +53,15 @@ AccountMenu::Menu::Menu() {
   addChildComponent(profile);
   addChildComponent(login);
   addChildComponent(logout);
+  addChildComponent(exportPresets);
+  addChildComponent(importPresets);
   addChildComponent(shutdown);
   relayout();
 }
 
 void AccountMenu::Menu::relayout() {
-  const int rows = 2 + static_cast<int>(profile.isVisible()) + static_cast<int>(shutdown.isVisible());
+  const int rows = 2 + static_cast<int>(profile.isVisible()) + static_cast<int>(shutdown.isVisible()) +
+                   (exportPresets.isVisible() ? 2 : 0);
   setSize(kMenuMinWidth, kBorder * 2 + kMenuPad * 2 + MenuRow::kHeight * rows);
   resized();
 }
@@ -76,6 +79,10 @@ void AccountMenu::Menu::resized() {
   const auto second = area.removeFromTop(MenuRow::kHeight);
   login.setBounds(second);
   logout.setBounds(second);
+  if (exportPresets.isVisible()) {
+    exportPresets.setBounds(area.removeFromTop(MenuRow::kHeight));
+    importPresets.setBounds(area.removeFromTop(MenuRow::kHeight));
+  }
   if (shutdown.isVisible()) shutdown.setBounds(area.removeFromTop(MenuRow::kHeight));
 }
 
@@ -108,6 +115,14 @@ AccountMenu::AccountMenu() : Clickable({}) {
     menu_.close();
     if (onLogout) onLogout();
   };
+  menu_.exportPresets.onClick = [this] {
+    menu_.close();
+    if (onPresetTransfer) onPresetTransfer(false);
+  };
+  menu_.importPresets.onClick = [this] {
+    menu_.close();
+    if (onPresetTransfer) onPresetTransfer(true);
+  };
 #if JUCE_LINUX
   if (juce::JUCEApplicationBase::isStandaloneApp() &&
       juce::SystemStats::getEnvironmentVariable("T3K_KIOSK", {}) == "1") {
@@ -120,6 +135,12 @@ AccountMenu::AccountMenu() : Clickable({}) {
 }
 
 AccountMenu::~AccountMenu() { menu_.close(); }
+
+void AccountMenu::setPresetTransferAvailable(bool available) {
+  menu_.exportPresets.setVisible(available);
+  menu_.importPresets.setVisible(available);
+  menu_.relayout();
+}
 
 void AccountMenu::confirmShutdown() {
 #if JUCE_LINUX

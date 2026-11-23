@@ -88,6 +88,60 @@ TEST(PresetManagerTest, SaveLoadRoundTripAndSameNameOverwrites) {
   EXPECT_EQ(mgr.list().size(), 1u);
 }
 
+TEST(PresetManagerTest, UsbBackupFiltersSelectionAndMergesByNameWithinEachBank) {
+  TempPresetDir sourceDir, targetDir, usb;
+  PresetManager source(sourceDir.dir), target(targetDir.dir);
+  ASSERT_TRUE(source.createBank("Rock"));
+  const auto rock = source.banks().back().id;
+  ASSERT_TRUE(source.createBank("Empty"));
+  const auto empty = source.banks().back().id;
+  const auto lead = source.save("Lead", makePreset("new lead"), rock, true);
+  const auto skip = source.save("Skip", makePreset("not selected"), rock, true);
+  const auto fresh = source.save("Fresh", makePreset("new one"), rock, true);
+  const auto unbanked = source.save("Lead", makePreset("unbanked copy"), {}, true);
+  ASSERT_FALSE(lead.id.isEmpty() || skip.id.isEmpty() || fresh.id.isEmpty() || unbanked.id.isEmpty());
+
+  const auto mounted = [] { return true; };
+  const auto backup = PresetManager::usbBackupFolder(usb.dir);
+  ASSERT_TRUE(backup.createDirectory().wasOk());
+  ASSERT_TRUE(backup.getChildFile("old.txt").replaceWithText("old backup"));
+  const auto invalid = source.exportUsbBackup(usb.dir, {{}, {"missing"}}, mounted);
+  EXPECT_TRUE(invalid.error.isNotEmpty());
+  EXPECT_TRUE(backup.getChildFile("old.txt").existsAsFile());
+
+  const PresetManager::TransferSelection selection{{empty}, {lead.id, fresh.id, unbanked.id}};
+  const auto exported = source.exportUsbBackup(usb.dir, selection, mounted);
+  ASSERT_TRUE(exported.error.isEmpty()) << exported.error;
+  EXPECT_EQ(exported.presets, 3);
+  EXPECT_FALSE(backup.getChildFile("old.txt").exists());
+  const auto groups = PresetManager::usbBackupGroups(usb.dir);
+  ASSERT_EQ(groups.size(), 3u);
+  EXPECT_EQ(groups[0].presets[0].id, unbanked.id);
+  ASSERT_EQ(groups[1].presets.size(), 2u);
+  EXPECT_EQ(groups[1].presets[0].id, lead.id);
+  EXPECT_EQ(groups[1].presets[1].id, fresh.id);
+  EXPECT_TRUE(groups[2].presets.empty());
+
+  ASSERT_TRUE(target.createBank("rock"));
+  const auto existingRock = target.banks().back().id;
+  const auto sameName = target.save("LEAD", makePreset("old lead"), existingRock, true);
+  const auto keep = target.save("Keep", makePreset("keep"), existingRock, true);
+  const auto oldDefault = target.save("Lead", makePreset("old default"), {}, true);
+  const auto imported = target.importUsbBackup(usb.dir, {{empty}, {lead.id, fresh.id}}, mounted);
+  ASSERT_TRUE(imported.error.isEmpty()) << imported.error;
+  EXPECT_EQ(imported.presets, 2);
+  EXPECT_EQ(target.load(sameName.id)["marker"].toString(), "new lead");
+  EXPECT_EQ(target.load(keep.id)["marker"].toString(), "keep");
+  EXPECT_EQ(target.load(oldDefault.id)["marker"].toString(), "old default");
+  const auto banks = target.banks();
+  ASSERT_EQ(banks.size(), 3u);
+  ASSERT_EQ(banks[1].presets.size(), 3);
+  EXPECT_EQ(banks[1].presets[0], sameName.id);
+  EXPECT_EQ(banks[1].presets[1], keep.id);
+  EXPECT_EQ(target.load(banks[1].presets[2])["marker"].toString(), "new one");
+  EXPECT_EQ(banks[2].name, "Empty");
+}
+
 TEST(PresetManagerTest, RenameAndRemoveApplyToUserPresetsOnly) {
   TempPresetDir tmp;
   PresetManager mgr(tmp.dir);

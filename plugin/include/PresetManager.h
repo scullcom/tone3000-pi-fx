@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_core/juce_core.h>
 #include <juce_data_structures/juce_data_structures.h>
+#include <functional>
 #include <map>
 #include <set>
 #include <vector>
@@ -72,6 +73,18 @@ public:
     juce::String name;
     juce::StringArray presets;
   };
+  struct TransferGroup {
+    juce::String id, name;
+    std::vector<Info> presets;
+  };
+  struct TransferSelection {
+    // A selected bank includes every preset in it. Individual IDs allow a partial bank.
+    juce::StringArray banks, presets;
+  };
+  struct TransferResult {
+    int presets = 0;
+    juce::String error;
+  };
 
   static constexpr const char* kFileExtension = t3k::presetfile::kExtension;
   static constexpr const char* kPresetTag = t3k::presetfile::kTag;
@@ -112,6 +125,14 @@ public:
   bool deleteBank(const juce::String& id) const;
   bool moveToBank(const juce::String& presetId, const juce::String& bankId, int index) const;
   bool copyToBank(const juce::String& presetId, const juce::String& bankId) const;
+
+  static juce::File usbBackupFolder(const juce::File& drive);
+  static std::vector<TransferGroup> usbBackupGroups(const juce::File& drive);
+  std::vector<TransferGroup> transferGroups() const;
+  TransferResult exportUsbBackup(const juce::File& drive, const TransferSelection& selection,
+                                const std::function<bool()>& driveStillMounted) const;
+  TransferResult importUsbBackup(const juce::File& drive, const TransferSelection& selection,
+                                const std::function<bool()>& driveStillMounted) const;
 
   /** Rename a user preset: rewrites the name inside the file and renames
       the file to match. The id is unchanged. */
@@ -166,6 +187,8 @@ private:
   juce::StringArray readOrder() const;
   bool writeOrder(const juce::StringArray& ids) const;
   bool writeBanks(const std::vector<Bank>& banks) const;
+  static bool safeUsbBackup(const juce::File& drive);
+  bool ignoreFactoryAndLinks = false;
 
   // Per-file cache behind list(); see the class comment. `valid` is false
   // for files that failed to parse, so a corrupt file costs one read, not

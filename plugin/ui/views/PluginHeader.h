@@ -27,6 +27,7 @@ public:
   std::function<void(bool show)> onToggleTuner;
   std::function<void(bool stereo)> onStereoToggle;
   std::function<void()> onUndo, onRedo, onOpenSettings, onLogin, onLogout;
+  std::function<void(bool importing)> onPresetTransfer;
 
   void paint(juce::Graphics& g) override;
   void resized() override;

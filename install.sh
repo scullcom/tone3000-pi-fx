@@ -43,7 +43,7 @@ fi
 packages=(ca-certificates git build-essential cmake ninja-build pkg-config python3 zenity
           libgtk-3-dev libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev libfreetype-dev
           libx11-dev libxcomposite-dev libxcursor-dev libxi-dev libxinerama-dev
-          libxrandr-dev libxrender-dev)
+          libxrandr-dev libxrender-dev udisks2)
 if [[ "$guitarix" == yes ]]; then
   packages+=(guitarix-lv2)
 fi

@@ -126,6 +126,7 @@ public:
   juce::String revealLogs() override;
   bool canOpenPresetsFolder() override;
   bool openPresetsFolder() override;
+  juce::File presetBackupSource() const override;
   bool canOpenDateTimeSettings() override;
   bool openDateTimeSettings() override;
   bool forwardKeyToHost(HostKey key) override;
