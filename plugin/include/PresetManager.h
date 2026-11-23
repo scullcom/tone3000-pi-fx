@@ -67,6 +67,11 @@ public:
     juce::String name;
     bool factory{false};
   };
+  struct Bank {
+    juce::String id;
+    juce::String name;
+    juce::StringArray presets;
+  };
 
   static constexpr const char* kFileExtension = t3k::presetfile::kExtension;
   static constexpr const char* kPresetTag = t3k::presetfile::kTag;
@@ -98,7 +103,15 @@ public:
       overwritten (same id); that's the "update" path, since the save
       popover is the only write UI. Returns the resulting Info, or an
       empty-id Info on IO failure. */
-  Info save(const juce::String& name, juce::ValueTree preset) const;
+  Info save(const juce::String& name, juce::ValueTree preset,
+            const juce::String& bankId = {}, bool banked = false) const;
+
+  std::vector<Bank> banks() const;
+  bool createBank(const juce::String& name) const;
+  bool renameBank(const juce::String& id, const juce::String& name) const;
+  bool deleteBank(const juce::String& id) const;
+  bool moveToBank(const juce::String& presetId, const juce::String& bankId, int index) const;
+  bool copyToBank(const juce::String& presetId, const juce::String& bankId) const;
 
   /** Rename a user preset: rewrites the name inside the file and renames
       the file to match. The id is unchanged. */
@@ -152,6 +165,7 @@ private:
   juce::File orderFile() const;
   juce::StringArray readOrder() const;
   bool writeOrder(const juce::StringArray& ids) const;
+  bool writeBanks(const std::vector<Bank>& banks) const;
 
   // Per-file cache behind list(); see the class comment. `valid` is false
   // for files that failed to parse, so a corrupt file costs one read, not

@@ -315,6 +315,7 @@ void TONE3000Processor::getStateInformation(juce::MemoryBlock& destData) {
   {
     juce::ScopedLock lock(chainMutex);
     state.setProperty("activePresetId", activePresetId, nullptr);
+    state.setProperty("activePresetBank", activePresetBank, nullptr);
     state.setProperty("activePresetName", activePresetName, nullptr);
     // The same ChainSnapshot tree that undo and presets use, with the
     // referenced models' bytes embedded so the project reopens offline
@@ -408,6 +409,7 @@ void TONE3000Processor::setStateInformation(const void* data, int sizeInBytes) {
 
     pendingAddSide = ChainSide::Left;
     activePresetId = state.getProperty("activePresetId").toString();
+    activePresetBank = state.getProperty("activePresetBank").toString();
     activePresetName = state.getProperty("activePresetName").toString();
     // A project/state load replaces the whole session; undoing across it
     // would resurrect chains the user never saw in this session.

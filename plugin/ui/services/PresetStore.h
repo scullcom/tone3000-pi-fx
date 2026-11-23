@@ -19,6 +19,7 @@ public:
   PresetStore(Backend& backend, ChainStore& chain);
 
   const std::vector<PresetInfo>& presets() const { return presets_; }
+  const std::vector<PresetBankInfo>& banks() const { return banks_; }
   void refresh();
 
   void addListener(Listener* l) { listeners.add(l); }
@@ -32,6 +33,13 @@ public:
   bool remove(const juce::String& id);
   // N steps within the preset's section (negative = earlier).
   bool move(const juce::String& id, int delta);
+  bool createPresetBank(const juce::String& name);
+  bool renamePresetBank(const juce::String& id, const juce::String& name);
+  bool deletePresetBank(const juce::String& id);
+  bool selectPresetBank(const juce::String& id);
+  bool stepPresetBank(int delta);
+  bool movePresetToBank(const juce::String& presetId, const juce::String& bankId, int index);
+  bool copyPresetToBank(const juce::String& presetId, const juce::String& bankId);
 
 private:
   template <typename Fn>
@@ -40,6 +48,7 @@ private:
   Backend& backend_;
   ChainStore& chain_;
   std::vector<PresetInfo> presets_;
+  std::vector<PresetBankInfo> banks_;
   juce::ListenerList<Listener> listeners;
 };
 

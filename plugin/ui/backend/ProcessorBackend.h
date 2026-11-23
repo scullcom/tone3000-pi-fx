@@ -75,6 +75,13 @@ public:
   bool renamePreset(const juce::String& presetId, const juce::String& newName) override;
   bool deletePreset(const juce::String& presetId) override;
   bool movePreset(const juce::String& presetId, int delta) override;
+  bool createPresetBank(const juce::String& name) override;
+  bool renamePresetBank(const juce::String& id, const juce::String& name) override;
+  bool deletePresetBank(const juce::String& id) override;
+  bool selectPresetBank(const juce::String& id) override;
+  bool stepPresetBank(int delta) override;
+  bool movePresetToBank(const juce::String& presetId, const juce::String& bankId, int index) override;
+  bool copyPresetToBank(const juce::String& presetId, const juce::String& bankId) override;
 
   juce::var getAudioDeviceState() override;
   juce::var setAudioDeviceType(const juce::String& typeName) override;

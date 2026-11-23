@@ -1,6 +1,7 @@
 #include "Processor.h"
 
 #include "LegacyParamIds.h"
+#include <algorithm>
 
 // #############################
 // INTERNAL PRESETS
@@ -44,16 +45,95 @@ void TONE3000Processor::setActivePreset(const juce::String& id, const juce::Stri
 
 juce::var TONE3000Processor::getPresetList() const {
   juce::Array<juce::var> presetArray;
-  for (const auto& info : presetManager.list()) {
+  juce::Array<juce::var> bankArray;
+  const auto presets = presetManager.list();
+  const auto banks = wrapperType == wrapperType_Standalone ? presetManager.banks()
+                                                          : std::vector<PresetManager::Bank>{};
+  const auto append = [&](const PresetManager::Info& info, const juce::String& bankId) {
     juce::DynamicObject::Ptr obj = new juce::DynamicObject();
     obj->setProperty("id", info.id);
     obj->setProperty("name", info.name);
     obj->setProperty("factory", info.factory);
+    obj->setProperty("bankId", bankId);
     presetArray.add(juce::var(obj.get()));
+  };
+  if (banks.size() <= 1) {
+    for (const auto& preset : presets) append(preset, {});
+  } else {
+    for (const auto& bank : banks) {
+      auto* record = new juce::DynamicObject();
+      record->setProperty("id", bank.id);
+      record->setProperty("name", bank.name);
+      bankArray.add(juce::var(record));
+      for (const auto& id : bank.presets) {
+        const auto preset = std::find_if(presets.begin(), presets.end(), [&](const auto& item) { return item.id == id; });
+        if (preset != presets.end()) append(*preset, bank.id);
+      }
+    }
+    for (const auto& preset : presets)
+      if (preset.factory) append(preset, {});
   }
   juce::DynamicObject::Ptr root = new juce::DynamicObject();
   root->setProperty("presets", presetArray);
+  root->setProperty("banks", bankArray);
   return root.get();
+}
+
+bool TONE3000Processor::createPresetBank(const juce::String& name) {
+  if (wrapperType != wrapperType_Standalone || !presetManager.createBank(name)) return false;
+  return selectPresetBank(presetManager.banks().back().id);
+}
+
+bool TONE3000Processor::renamePresetBank(const juce::String& id, const juce::String& name) {
+  if (wrapperType != wrapperType_Standalone || !presetManager.renameBank(id, name)) return false;
+  bumpChainRevision();
+  return true;
+}
+
+bool TONE3000Processor::deletePresetBank(const juce::String& id) {
+  if (wrapperType != wrapperType_Standalone || !presetManager.deleteBank(id)) return false;
+  const auto presets = presetManager.list();
+  const juce::ScopedLock lock(chainMutex);
+  if (activePresetBank == id) activePresetBank.clear();
+  if (std::none_of(presets.begin(), presets.end(), [&](const auto& preset) { return preset.id == activePresetId; })) {
+    activePresetId.clear();
+    activePresetName.clear();
+  }
+  bumpChainRevision();
+  return true;
+}
+
+bool TONE3000Processor::selectPresetBank(const juce::String& id) {
+  if (wrapperType != wrapperType_Standalone) return false;
+  const auto banks = presetManager.banks();
+  if (std::none_of(banks.begin(), banks.end(), [&](const auto& bank) { return bank.id == id; })) return false;
+  const juce::ScopedLock lock(chainMutex);
+  if (activePresetBank != id) {
+    activePresetBank = id;
+    bumpChainRevision();
+  }
+  return true;
+}
+
+bool TONE3000Processor::stepPresetBank(int delta) {
+  if (wrapperType != wrapperType_Standalone || delta == 0) return false;
+  const auto banks = presetManager.banks();
+  if (banks.size() <= 1) return false;
+  const juce::ScopedLock lock(chainMutex);
+  const auto selected = std::find_if(banks.begin(), banks.end(), [&](const auto& bank) { return bank.id == activePresetBank; });
+  const int current = selected == banks.end() ? 0 : static_cast<int>(selected - banks.begin());
+  const int count = static_cast<int>(banks.size());
+  activePresetBank = banks[static_cast<size_t>((current + delta % count + count) % count)].id;
+  bumpChainRevision();
+  return true;
+}
+
+bool TONE3000Processor::movePresetToBank(const juce::String& presetId, const juce::String& bankId, int index) {
+  return wrapperType == wrapperType_Standalone && presetManager.moveToBank(presetId, bankId, index);
+}
+
+bool TONE3000Processor::copyPresetToBank(const juce::String& presetId, const juce::String& bankId) {
+  return wrapperType == wrapperType_Standalone && presetManager.copyToBank(presetId, bankId);
 }
 
 juce::var TONE3000Processor::savePreset(const juce::String& rawName) {
@@ -83,7 +163,15 @@ juce::var TONE3000Processor::savePreset(const juce::String& rawName) {
   }
   preset.appendChild(params, nullptr);
 
-  const PresetManager::Info info = presetManager.save(name, preset);
+  const auto banks = wrapperType == wrapperType_Standalone ? presetManager.banks()
+                                                          : std::vector<PresetManager::Bank>{};
+  juce::String bankId;
+  if (banks.size() > 1) {
+    juce::ScopedLock lock(chainMutex);
+    for (const auto& bank : banks)
+      if (bank.id == activePresetBank) bankId = bank.id;
+  }
+  const PresetManager::Info info = presetManager.save(name, preset, bankId, banks.size() > 1);
   if (info.id.isEmpty())
     return {};
 
@@ -100,16 +188,29 @@ juce::var TONE3000Processor::savePreset(const juce::String& rawName) {
   return obj.get();
 }
 
+juce::StringArray TONE3000Processor::performancePresetIds() const {
+  if (wrapperType == wrapperType_Standalone) {
+    const auto banks = presetManager.banks();
+    if (banks.size() > 1) {
+      juce::ScopedLock lock(chainMutex);
+      for (const auto& bank : banks)
+        if (bank.id == activePresetBank) return bank.presets;
+      return banks.front().presets;
+    }
+  }
+  juce::StringArray ids;
+  for (const auto& preset : presetManager.list()) ids.add(preset.id);
+  return ids;
+}
+
 bool TONE3000Processor::loadPresetAtIndex(int index) {
-  const auto presets = presetManager.list();
-  if (index < 0 || index >= static_cast<int>(presets.size()))
-    return false;  // controller sent a program beyond the list: ignore
-  return loadPreset(presets[static_cast<size_t>(index)].id);
+  const auto ids = performancePresetIds();
+  return index >= 0 && index < ids.size() && loadPreset(ids[index]);
 }
 
 bool TONE3000Processor::stepPreset(int delta) {
-  const auto presets = presetManager.list();
-  const int count = static_cast<int>(presets.size());
+  const auto presets = performancePresetIds();
+  const int count = presets.size();
   if (count == 0 || delta == 0)
     return false;
 
@@ -120,7 +221,7 @@ bool TONE3000Processor::stepPreset(int delta) {
   }
   int index = -1;
   for (int i = 0; i < count; ++i) {
-    if (presets[static_cast<size_t>(i)].id == currentId) {
+    if (presets[i] == currentId) {
       index = i;
       break;
     }
@@ -131,7 +232,7 @@ bool TONE3000Processor::stepPreset(int delta) {
   // the last.
   const int next = index < 0 ? (delta > 0 ? 0 : count - 1)
                              : ((index + delta) % count + count) % count;
-  return loadPreset(presets[static_cast<size_t>(next)].id);
+  return loadPreset(presets[next]);
 }
 
 bool TONE3000Processor::loadPreset(const juce::String& presetId) {
@@ -139,6 +240,14 @@ bool TONE3000Processor::loadPreset(const juce::String& presetId) {
   const juce::ValueTree snapshot = preset.getChildWithName("ChainSnapshot");
   if (!snapshot.isValid())
     return false;
+
+  if (wrapperType == wrapperType_Standalone)
+    for (const auto& bank : presetManager.banks())
+      if (bank.presets.contains(presetId)) {
+        const juce::ScopedLock lock(chainMutex);
+        activePresetBank = bank.id;
+        break;
+      }
 
   // A preset replaces the whole chain (and jumps the faceplate parameters
   // below), so mute-splice the transition like any structural edit. The fade

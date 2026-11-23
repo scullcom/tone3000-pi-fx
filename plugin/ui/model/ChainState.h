@@ -138,6 +138,12 @@ struct PresetInfo {
   juce::String id;
   juce::String name;
   bool factory = false;
+  juce::String bankId;
+};
+
+struct PresetBankInfo {
+  juce::String id;
+  juce::String name;
 };
 
 struct ActivePreset {
@@ -157,6 +163,7 @@ struct ChainState {
   bool canPasteBlock = false;
   bool atDefault = false;
   std::optional<ActivePreset> preset;
+  juce::String presetBank;
   bool stereoEnabled = false;
   ChainSide activeSide = ChainSide::left;
   bool stereoInput = false;

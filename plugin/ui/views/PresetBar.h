@@ -58,6 +58,8 @@ private:
 
   const std::optional<ActivePreset>& active() const { return services_.chain.state().preset; }
   const std::vector<PresetInfo>& presets() const { return services_.presets.presets(); }
+  juce::String selectedBankId() const;
+  juce::String selectedBankName() const;
   void step(int direction);
   void loadAndClose(const juce::String& id);
   void refreshChrome();

@@ -995,7 +995,7 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
   std::vector<BlockRow> left, right;
   bool stereo = false, canUndo = false, canRedo = false, branched = false;
   bool canPaste = false, atDefault = false, stereoIr = false, stereoEffect = false;
-  juce::String presetId, presetName, branchSide, activeSide, branchAfter;
+  juce::String presetId, presetName, presetBank, branchSide, activeSide, branchAfter;
 
   {
     juce::ScopedLock lock(chainMutex);
@@ -1107,6 +1107,7 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
     atDefault = isChainAtDefault();
     presetId = activePresetId;
     presetName = activePresetName;
+    presetBank = activePresetBank;
     branched = stereo && !branchAfterBlockId.empty();
     if (branched) {
       branchSide = branchSourceSide == ChainSide::Right ? "right" : "left";
@@ -1202,6 +1203,7 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
   // True when nothing distinguishes this state from a fresh instance (see
   // isChainAtDefault); the top bar's New button greys out on it.
   state->setProperty("atDefault", atDefault);
+  state->setProperty("presetBank", presetBank);
   if (presetId.isNotEmpty()) {
     juce::DynamicObject::Ptr preset = new juce::DynamicObject();
     preset->setProperty("id", presetId);

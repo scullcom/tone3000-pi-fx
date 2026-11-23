@@ -108,13 +108,14 @@ public:
   /** Mapped preset prev/next controls fired; delta is the net step count
       (+1 per next press, -1 per previous, coalesced like the toggles). */
   std::function<void(int delta)> onPresetStep;
+  std::function<void(int delta)> onBankStep;
   /** A mapped tuner control fired (net of parity coalescing). Set by the
       editor, which owns the tuner screen. */
   std::function<void()> onTunerToggle;
 
 private:
   enum class Source : int { cc = 0, note = 1 };
-  enum class Kind : int { parameter = 0, blockPower = 1, stereoMode = 2, presetStep = 3, tuner = 4 };
+  enum class Kind : int { parameter, blockPower, stereoMode, presetStep, tuner, bankStep };
 
   /** Virtual target id for the chain's stereo on/off (chain state, not an
       APVTS parameter; the UI catalog uses the same id). */
@@ -123,6 +124,8 @@ private:
       ids). Triggers, not toggles: each press walks the preset list. */
   static constexpr const char* kPresetPrevTarget = "presetPrevious";
   static constexpr const char* kPresetNextTarget = "presetNext";
+  static constexpr const char* kBankPrevTarget = "bankPrevious";
+  static constexpr const char* kBankNextTarget = "bankNext";
   /** Virtual target id for the tuner screen (the UI catalog uses the same id). */
   static constexpr const char* kTunerTarget = "tuner";
 
@@ -159,6 +162,7 @@ private:
   bool isValidTarget(const juce::String& targetId) const {
     return blockPowerTargetFor(targetId).index >= 0 || targetId == kStereoTarget ||
            targetId == kPresetPrevTarget || targetId == kPresetNextTarget ||
+           targetId == kBankPrevTarget || targetId == kBankNextTarget ||
            targetId == kTunerTarget || parameters.getParameter(targetId) != nullptr;
   }
 
@@ -196,6 +200,7 @@ private:
   std::atomic<int> pendingStereoToggles{0};  // flip count; parity applies
   std::atomic<int> pendingTunerToggles{0};   // flip count; parity applies
   std::atomic<int> pendingPresetSteps{0};    // signed sum of ±1 steps
+  std::atomic<int> pendingBankSteps{0};
   std::atomic<bool> mapDirty{false};                 // gate for onChanged
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiMapper)

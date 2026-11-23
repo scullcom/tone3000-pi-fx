@@ -11,6 +11,8 @@ const std::vector<MappableTarget>& mappableTargets() {
         // programmed with CC / note buttons instead of program changes.
         {"presetPrevious", "Previous Preset", "Presets", K::trigger},
         {"presetNext", "Next Preset", "Presets", K::trigger},
+        {"bankPrevious", "Previous Bank", "Presets", K::trigger},
+        {"bankNext", "Next Bank", "Presets", K::trigger},
         // Virtual: opens / closes the tuner screen.
         {"tuner", "Tuner", "Global", K::toggle},
         {"inputLevel", "Input Gain", "Global", K::continuous},

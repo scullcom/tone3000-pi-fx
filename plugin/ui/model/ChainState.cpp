@@ -174,6 +174,7 @@ ChainState ChainState::parse(const juce::var& v) {
   s.canRedo = boolean(v, "canRedo");
   s.canPasteBlock = boolean(v, "canPasteBlock");
   s.atDefault = boolean(v, "atDefault");
+  s.presetBank = str(v, "presetBank");
   if (v["preset"].isObject())
     s.preset = ActivePreset{str(v["preset"], "id"), str(v["preset"], "name")};
   s.stereoEnabled = boolean(v, "stereoEnabled");
@@ -260,7 +261,7 @@ AutoMeasureResult AutoMeasureResult::parse(const juce::var& v) {
 
 std::vector<PresetInfo> parsePresetList(const juce::var& v) {
   return list<PresetInfo>(v, "presets", [](const juce::var& p) {
-    return PresetInfo{str(p, "id"), str(p, "name"), boolean(p, "factory", false)};
+    return PresetInfo{str(p, "id"), str(p, "name"), boolean(p, "factory", false), str(p, "bankId")};
   });
 }
 

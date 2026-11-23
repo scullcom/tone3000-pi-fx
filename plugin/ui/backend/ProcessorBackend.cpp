@@ -182,6 +182,34 @@ bool ProcessorBackend::movePreset(const juce::String& presetId, int delta) {
   return processor_.movePreset(presetId, delta);
 }
 
+bool ProcessorBackend::createPresetBank(const juce::String& name) {
+  return processor_.createPresetBank(name);
+}
+
+bool ProcessorBackend::renamePresetBank(const juce::String& id, const juce::String& name) {
+  return processor_.renamePresetBank(id, name);
+}
+
+bool ProcessorBackend::deletePresetBank(const juce::String& id) {
+  return processor_.deletePresetBank(id);
+}
+
+bool ProcessorBackend::selectPresetBank(const juce::String& id) {
+  return processor_.selectPresetBank(id);
+}
+
+bool ProcessorBackend::stepPresetBank(int delta) {
+  return processor_.stepPresetBank(delta);
+}
+
+bool ProcessorBackend::movePresetToBank(const juce::String& presetId, const juce::String& bankId, int index) {
+  return processor_.movePresetToBank(presetId, bankId, index);
+}
+
+bool ProcessorBackend::copyPresetToBank(const juce::String& presetId, const juce::String& bankId) {
+  return processor_.copyPresetToBank(presetId, bankId);
+}
+
 // Audio device settings (standalone only)
 juce::var ProcessorBackend::getAudioDeviceState() {
   return withAudioSettings([](auto& s) { return s.getState(); });

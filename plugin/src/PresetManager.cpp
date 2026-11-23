@@ -322,7 +322,153 @@ juce::ValueTree PresetManager::load(const juce::String& id) const {
   return presetfile::read(fileForId(id));
 }
 
-PresetManager::Info PresetManager::save(const juce::String& name, juce::ValueTree preset) const {
+std::vector<PresetManager::Bank> PresetManager::banks() const {
+  auto json = juce::JSON::parse(userDir.getChildFile("banks.json").loadFileAsString());
+  std::vector<Bank> result{{{}, "Your Presets", {}}};
+  juce::StringArray unassigned;
+  for (const auto& preset : list())
+    if (!preset.factory) unassigned.add(preset.id);
+
+  if (const auto* records = json.getArray()) {
+    juce::StringArray defaultOrder;
+    for (const auto& record : *records) {
+      Bank bank{record["id"].toString(), record["name"].toString(), {}};
+      const auto members = record["presets"];
+      if (bank.id.isEmpty()) {
+        if (const auto* ids = members.getArray())
+          for (const auto& id : *ids) defaultOrder.addIfNotAlreadyThere(id.toString());
+        continue;
+      }
+      if (bank.name.isEmpty() || std::any_of(result.begin(), result.end(),
+                                             [&](const auto& item) { return item.id == bank.id; }))
+        continue;
+      if (const auto* ids = members.getArray())
+        for (const auto& id : *ids)
+          if (unassigned.contains(id.toString())) {
+            bank.presets.add(id.toString());
+            unassigned.removeString(id.toString());
+          }
+      result.push_back(std::move(bank));
+    }
+    for (const auto& id : defaultOrder)
+      if (unassigned.contains(id)) {
+        result.front().presets.add(id);
+        unassigned.removeString(id);
+      }
+  }
+  result.front().presets.addArray(unassigned);
+  return result;
+}
+
+bool PresetManager::writeBanks(const std::vector<Bank>& banks) const {
+  if (!TONE3000Processor::ensureWritableDir(userDir)) return false;
+  juce::Array<juce::var> records;
+  for (const auto& bank : banks) {
+    auto* record = new juce::DynamicObject();
+    record->setProperty("id", bank.id);
+    record->setProperty("name", bank.name);
+    juce::Array<juce::var> ids;
+    for (const auto& id : bank.presets) ids.add(id);
+    record->setProperty("presets", ids);
+    records.add(juce::var(record));
+  }
+  return userDir.getChildFile("banks.json").replaceWithText(juce::JSON::toString(records));
+}
+
+bool PresetManager::createBank(const juce::String& name) const {
+  const juce::ScopedLock lock(cacheLock);
+  auto records = banks();
+  const auto trimmed = name.trim();
+  if (trimmed.isEmpty()) return false;
+  records.push_back({juce::Uuid().toString(), trimmed, {}});
+  return writeBanks(records);
+}
+
+bool PresetManager::renameBank(const juce::String& id, const juce::String& name) const {
+  const juce::ScopedLock lock(cacheLock);
+  auto records = banks();
+  const auto trimmed = name.trim();
+  if (id.isEmpty() || trimmed.isEmpty()) return false;
+  for (auto& bank : records) {
+    if (bank.id != id) continue;
+    bank.name = trimmed;
+    return writeBanks(records);
+  }
+  return false;
+}
+
+bool PresetManager::moveToBank(const juce::String& presetId, const juce::String& bankId, int index) const {
+  const juce::ScopedLock lock(cacheLock);
+  auto records = banks();
+  auto destination = std::find_if(records.begin(), records.end(), [&](const auto& bank) {
+    return bank.id == bankId;
+  });
+  if (destination == records.end() || !presetId.startsWith(kUserPrefix)) return false;
+  bool found = false;
+  for (auto& bank : records) {
+    found = bank.presets.contains(presetId) || found;
+    bank.presets.removeString(presetId);
+  }
+  if (!found) return false;
+  destination->presets.insert(juce::jlimit(0, destination->presets.size(), index), presetId);
+  return writeBanks(records);
+}
+
+bool PresetManager::copyToBank(const juce::String& presetId, const juce::String& bankId) const {
+  const juce::ScopedLock lock(cacheLock);
+  auto records = banks();
+  auto destination = std::find_if(records.begin(), records.end(), [&](const auto& bank) {
+    return bank.id == bankId;
+  });
+  auto preset = load(presetId);
+  if (destination == records.end() || !preset.isValid()) return false;
+  const auto baseName = preset.getProperty("name", "Preset").toString();
+  auto name = baseName;
+  const auto presets = list();
+  const auto nameUsed = [&](const juce::String& candidate) {
+    return std::any_of(presets.begin(), presets.end(), [&](const auto& item) {
+      return destination->presets.contains(item.id) && item.name.equalsIgnoreCase(candidate);
+    });
+  };
+  for (int suffix = 2; nameUsed(name); ++suffix) name = baseName + " " + juce::String(suffix);
+  return save(name, std::move(preset), bankId, true).id.isNotEmpty();
+}
+
+bool PresetManager::deleteBank(const juce::String& id) const {
+  const juce::ScopedLock lock(cacheLock);
+  auto records = banks();
+  auto bank = std::find_if(records.begin() + 1, records.end(), [&](const auto& item) { return item.id == id; });
+  if (bank == records.end()) return false;
+
+  // Keep a recoverable copy until all file moves and the bank update succeed.
+  const auto pending = userDir.getNonexistentChildFile(".deleted-bank", {}, false);
+  if (!pending.createDirectory()) return false;
+  std::vector<std::pair<juce::File, juce::File>> moved;
+  bool complete = true;
+  for (const auto& presetId : bank->presets) {
+    const auto original = fileForId(presetId);
+    if (original == juce::File()) { complete = false; break; }
+    const auto target = pending.getChildFile(original.getFileName());
+    if (!original.moveFileTo(target)) { complete = false; break; }
+    moved.emplace_back(original, target);
+  }
+  records.erase(bank);
+  if (!complete || !writeBanks(records)) {
+    bool restored = true;
+    for (const auto& [original, target] : moved)
+      restored = target.moveFileTo(original) && restored;
+    if (restored) pending.deleteFile();
+    else juce::Logger::writeToLog("[Presets] Recover files from " + pending.getFullPathName());
+    return false;
+  }
+  if (!pending.deleteRecursively())
+    juce::Logger::writeToLog("[Presets] Could not clear " + pending.getFullPathName());
+  return true;
+}
+
+PresetManager::Info PresetManager::save(const juce::String& name, juce::ValueTree preset,
+                                       const juce::String& bankId, bool banked) const {
+  const juce::ScopedLock lock(cacheLock);
   // ensureWritableDir rather than a bare createDirectory: the folder can
   // exist and still be unwritable (root-owned after a sudo'd script), and
   // that state used to fail every save with this same log line forever.
@@ -337,8 +483,12 @@ PresetManager::Info PresetManager::save(const juce::String& name, juce::ValueTre
   // the UI and any DAW project already hold stays valid.
   juce::File current;
   juce::String rawId;
+  auto records = banked ? banks() : std::vector<Bank>{};
+  auto bank = std::find_if(records.begin(), records.end(), [&](const auto& item) { return item.id == bankId; });
+  if (banked && bank == records.end()) return {};
   for (const Entry& existing : entries()) {
-    if (!existing.info.factory && existing.info.name.compareIgnoreCase(name) == 0) {
+    if (!existing.info.factory && (!banked || bank->presets.contains(existing.info.id)) &&
+        existing.info.name.compareIgnoreCase(name) == 0) {
       current = existing.file;
       rawId = stripPrefix(existing.info.id, kUserPrefix);
       break;
@@ -349,13 +499,21 @@ PresetManager::Info PresetManager::save(const juce::String& name, juce::ValueTre
 
   preset.setProperty("name", name, nullptr);
   preset.setProperty("id", rawId, nullptr);
-  if (writeUserPreset(userDir, current, name, preset) == juce::File()) {
+  const auto written = writeUserPreset(userDir, current, name, preset);
+  if (written == juce::File()) {
     juce::Logger::writeToLog("[Presets] Failed to write preset file for: " + name);
     return {};
   }
 
   Info info;
   info.id = kUserPrefix + rawId;
+  if (banked && !bank->presets.contains(info.id)) {
+    bank->presets.add(info.id);
+    if (!writeBanks(records)) {
+      written.deleteFile();
+      return {};
+    }
+  }
   info.name = name;
   info.factory = false;
   return info;

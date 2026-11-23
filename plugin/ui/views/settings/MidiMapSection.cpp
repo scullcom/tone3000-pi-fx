@@ -377,6 +377,7 @@ void MidiMapSection::rebuild() {
   };
   std::vector<SelectField::Option> options;
   for (const auto& target : midi::mappableTargets()) {
+    if (!chain.standalone && (target.id == "bankPrevious" || target.id == "bankNext")) continue;
     if (state->mappingFor(target.id) != nullptr) continue;
     if (const auto block = midi::blockPowerTarget(target.id); block && block->index >= laneCount(block->right))
       continue;

@@ -115,6 +115,10 @@ void MidiMapper::applyEvent(Mapping& mapping, const juce::MidiMessage& msg) {
         pendingPresetSteps.fetch_add(mapping.presetDelta);
         triggerAsyncUpdate();
         return;
+      case Kind::bankStep:
+        pendingBankSteps.fetch_add(mapping.presetDelta);
+        triggerAsyncUpdate();
+        return;
       case Kind::parameter: {
         auto& param = *mapping.param;
         param.setValueNotifyingHost(param.getValue() < 0.5f ? 1.0f : 0.0f);
@@ -211,10 +215,11 @@ bool MidiMapper::setCcMapping(const juce::String& targetId, int ccNumber) {
 MidiMapper::Mapping MidiMapper::makeMapping(const juce::String& targetId, Source source,
                                             int number) const {
   const auto block = blockPowerTargetFor(targetId);
-  const int presetDelta = targetId == kPresetNextTarget   ? 1
-                          : targetId == kPresetPrevTarget ? -1
-                                                          : 0;
-  const Kind kind = presetDelta != 0          ? Kind::presetStep
+  const bool isBankStep = targetId == kBankNextTarget || targetId == kBankPrevTarget;
+  const int presetDelta = targetId == kPresetNextTarget || targetId == kBankNextTarget ? 1
+                          : targetId == kPresetPrevTarget || targetId == kBankPrevTarget ? -1 : 0;
+  const Kind kind = isBankStep                ? Kind::bankStep
+                    : presetDelta != 0        ? Kind::presetStep
                     : targetId == kStereoTarget ? Kind::stereoMode
                     : targetId == kTunerTarget  ? Kind::tuner
                     : block.index >= 0          ? Kind::blockPower
@@ -247,6 +252,8 @@ void MidiMapper::handleAsyncUpdate() {
   }
 
   // 2. Deliver deferred performance events (presets, block powers).
+  if (const int steps = pendingBankSteps.exchange(0); steps != 0 && onBankStep)
+    onBankStep(steps);
   const int program = pendingProgram.exchange(-1);
   if (program >= 0 && onProgramChange)
     onProgramChange(program);

@@ -237,6 +237,55 @@ TEST(HostProgramTest, RawMidiProgramChangeMatchesHostProgramIndexing) {
   EXPECT_EQ(proc.getCurrentProgram(), 0);
 }
 
+TEST(PresetBankTest, BankCcCuesWithoutLoadingAndProgramNumbersRestart) {
+  TempPresetDir tmp;
+  juce::AudioProcessor::setTypeOfNextNewPlugin(juce::AudioProcessor::wrapperType_Standalone);
+  TONE3000Processor proc;
+  juce::AudioProcessor::setTypeOfNextNewPlugin(juce::AudioProcessor::wrapperType_Undefined);
+  proc.setPresetStoreForTesting(tmp.dir);
+  ASSERT_TRUE(proc.createPresetBank("Rock"));
+  const auto rock = proc.getPresetList()["banks"][1]["id"].toString();
+  savePresetWithBass(proc, "Rock clean", 1.0f);
+  savePresetWithBass(proc, "Rock lead", 3.0f);
+  ASSERT_TRUE(proc.createPresetBank("Pop"));
+  const auto pop = proc.getPresetList()["banks"][2]["id"].toString();
+  ASSERT_TRUE(rock.isNotEmpty() && pop.isNotEmpty());
+  savePresetWithBass(proc, "Pop clean", 5.0f);
+  savePresetWithBass(proc, "Pop lead", 9.0f);
+  ASSERT_TRUE(proc.midiMapper.setCcMapping("bankPrevious", 27));
+  ASSERT_TRUE(proc.midiMapper.setCcMapping("bankNext", 26));
+
+  juce::MidiBuffer midi;
+  midi.addEvent(juce::MidiMessage::controllerEvent(1, 27, 127), 0);
+  midi.addEvent(juce::MidiMessage::controllerEvent(1, 27, 0), 1);
+  proc.midiMapper.processMidi(midi);
+  pumpMessages();
+  EXPECT_EQ(proc.getChainState(-1)["presetBank"].toString(), rock);
+  EXPECT_NEAR(toneBass(proc), 9.0f, 0.01f);
+
+  midi.clear();
+  midi.addEvent(juce::MidiMessage::programChange(1, 0), 0);
+  proc.midiMapper.processMidi(midi);
+  pumpMessages();
+  EXPECT_NEAR(toneBass(proc), 1.0f, 0.01f);
+
+  midi.clear();
+  midi.addEvent(juce::MidiMessage::controllerEvent(1, 26, 127), 0);
+  midi.addEvent(juce::MidiMessage::programChange(1, 0), 1);
+  proc.midiMapper.processMidi(midi);
+  pumpMessages();
+  EXPECT_EQ(proc.getChainState(-1)["presetBank"].toString(), pop);
+  EXPECT_NEAR(toneBass(proc), 5.0f, 0.01f);
+
+  EXPECT_TRUE(proc.stepPresetBank(-1));
+  juce::MemoryBlock state;
+  proc.getStateInformation(state);
+  EXPECT_TRUE(proc.stepPresetBank(1));
+  proc.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+  EXPECT_EQ(proc.getChainState(-1)["presetBank"].toString(), rock);
+  EXPECT_NEAR(toneBass(proc), 5.0f, 0.01f);
+}
+
 TEST(HostProgramTest, PresetChangesRaiseProgramChangedForHosts) {
   // updateHostDisplay(programChanged) is the hook plugin wrappers use to
   // sync their program parameter and menus; every path that moves the

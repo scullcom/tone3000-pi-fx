@@ -227,6 +227,42 @@ TEST(PresetManagerTest, MovePersistsOrderWithinTheUserSection) {
   EXPECT_FALSE(fresh.move(a.id, -1));
 }
 
+TEST(PresetManagerTest, BanksPersistOrderAndCopiesRemainIndependent) {
+  TempPresetDir tmp;
+  PresetManager mgr(tmp.dir);
+  const auto original = mgr.save("Clean", makePreset("original"));
+  const auto lead = mgr.save("Lead", makePreset("lead"));
+  ASSERT_TRUE(mgr.createBank("Rock / Live"));
+  ASSERT_TRUE(mgr.createBank("Pop"));
+  const auto rock = mgr.banks()[1].id;
+  const auto pop = mgr.banks()[2].id;
+  ASSERT_TRUE(mgr.moveToBank(original.id, rock, 0));
+  ASSERT_TRUE(mgr.moveToBank(lead.id, rock, 0));
+  ASSERT_TRUE(mgr.copyToBank(original.id, pop));
+  ASSERT_TRUE(mgr.renameBank(rock, "Rock / Friday"));
+
+  PresetManager fresh(tmp.dir);
+  const auto banks = fresh.banks();
+  ASSERT_EQ(banks.size(), 3u);
+  EXPECT_EQ(banks[1].name, "Rock / Friday");
+  EXPECT_EQ(banks[1].presets, juce::StringArray({lead.id, original.id}));
+  ASSERT_EQ(banks[2].presets.size(), 1);
+  const auto copy = banks[2].presets[0];
+  EXPECT_NE(copy, original.id);
+  EXPECT_EQ(fresh.load(copy)["marker"].toString(), "original");
+  EXPECT_EQ(fresh.save("Clean", makePreset("changed"), pop, true).id, copy);
+  EXPECT_EQ(fresh.load(original.id)["marker"].toString(), "original");
+  EXPECT_EQ(fresh.load(copy)["marker"].toString(), "changed");
+
+  ASSERT_TRUE(fresh.deleteBank(rock));
+  EXPECT_FALSE(fresh.load(original.id).isValid());
+  EXPECT_FALSE(fresh.load(lead.id).isValid());
+  EXPECT_TRUE(fresh.load(copy).isValid());
+  ASSERT_EQ(fresh.banks().size(), 2u);
+  EXPECT_EQ(fresh.banks()[1].id, pop);
+  EXPECT_FALSE(fresh.deleteBank({}));
+}
+
 TEST(PresetManagerTest, MoveShiftsByDeltaWithinTheSection) {
   TempPresetDir tmp;
   PresetManager mgr(tmp.dir);

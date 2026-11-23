@@ -7,7 +7,13 @@ PresetStore::PresetStore(Backend& backend, ChainStore& chain) : backend_(backend
 }
 
 void PresetStore::refresh() {
-  presets_ = parsePresetList(backend_.getPresetList());
+  const auto list = backend_.getPresetList();
+  presets_ = parsePresetList(list);
+  banks_.clear();
+  const auto bankArray = list["banks"];
+  if (const auto* banks = bankArray.getArray())
+    for (const auto& bank : *banks)
+      banks_.push_back({bank["id"].toString(), bank["name"].toString()});
   listeners.call([this](Listener& l) { l.presetsChanged(presets_); });
 }
 
@@ -43,6 +49,34 @@ bool PresetStore::remove(const juce::String& id) {
 
 bool PresetStore::move(const juce::String& id, int delta) {
   return run([&] { return backend_.movePreset(id, delta); });
+}
+
+bool PresetStore::createPresetBank(const juce::String& name) {
+  return run([&] { return backend_.createPresetBank(name); });
+}
+
+bool PresetStore::renamePresetBank(const juce::String& id, const juce::String& name) {
+  return run([&] { return backend_.renamePresetBank(id, name); });
+}
+
+bool PresetStore::deletePresetBank(const juce::String& id) {
+  return run([&] { return backend_.deletePresetBank(id); });
+}
+
+bool PresetStore::selectPresetBank(const juce::String& id) {
+  return run([&] { return backend_.selectPresetBank(id); });
+}
+
+bool PresetStore::stepPresetBank(int delta) {
+  return run([&] { return backend_.stepPresetBank(delta); });
+}
+
+bool PresetStore::movePresetToBank(const juce::String& presetId, const juce::String& bankId, int index) {
+  return run([&] { return backend_.movePresetToBank(presetId, bankId, index); });
+}
+
+bool PresetStore::copyPresetToBank(const juce::String& presetId, const juce::String& bankId) {
+  return run([&] { return backend_.copyPresetToBank(presetId, bankId); });
 }
 
 }  // namespace t3k::ui

@@ -466,6 +466,13 @@ public:
   // together with a revision bump. Preset files live in the shared user
   // presets folder (see PresetManager).
   juce::var getPresetList() const;    // { presets: [{ id, name, factory }] }
+  bool createPresetBank(const juce::String& name);
+  bool renamePresetBank(const juce::String& id, const juce::String& name);
+  bool deletePresetBank(const juce::String& id);
+  bool selectPresetBank(const juce::String& id);
+  bool stepPresetBank(int delta);
+  bool movePresetToBank(const juce::String& presetId, const juce::String& bankId, int index);
+  bool copyPresetToBank(const juce::String& presetId, const juce::String& bankId);
   juce::var savePreset(const juce::String& name);  // { id, name } or void var on failure
   bool loadPreset(const juce::String& presetId);   // undoable (chain part)
   bool renamePreset(const juce::String& presetId, const juce::String& newName);
@@ -862,6 +869,7 @@ private:
   // factory; the same order the preset browser shows and numbers).
   // Out-of-range programs are ignored.
   bool loadPresetAtIndex(int index);
+  juce::StringArray performancePresetIds() const;
   // Step the active preset through the list order, wrapping at the ends:
   // the MIDI twin of the preset bar's ‹ › buttons (mapped "presetPrevious" /
   // "presetNext" controls land here). With no active preset, a forward step
@@ -891,6 +899,7 @@ private:
   // Shown in the preset pill; guarded by chainMutex (written on the message
   // thread, read by getChainState).
   juce::String activePresetId;
+  juce::String activePresetBank;
   juce::String activePresetName;
 
   // Host program API internals (ProcessorPresets.cpp). The count is a hard

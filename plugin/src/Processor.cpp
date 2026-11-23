@@ -99,6 +99,7 @@ TONE3000Processor::TONE3000Processor()
   // chain edit paths.
   midiMapper.onProgramChange = [this](int program) { loadPresetAtIndex(program); };
   midiMapper.onPresetStep = [this](int delta) { stepPreset(delta); };
+  midiMapper.onBankStep = [this](int delta) { stepPresetBank(delta); };
   midiMapper.onBlockPowerToggle = [this](int index, bool right) {
     toggleBlockPower(index, right);
   };

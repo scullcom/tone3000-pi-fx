@@ -25,6 +25,7 @@ constexpr int kRowHeight = 32;
 constexpr int kSectionHeaderHeight = 32;  // 14px bold + 8px padding top/bottom
 constexpr int kListMaxHeight = 362;
 constexpr int kListPadTop = 10, kListPadBottom = 12;
+const juce::Colour kBankWarning{0xffff796e};
 
 // Borderless white icon button with `pad` around an `icon`-px glyph
 // (PresetBar.tsx iconButtonStyle: radius 4).
@@ -96,19 +97,30 @@ public:
     setHelpText(help::text(help::Key::presetBrowse));
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
   }
-  void set(const juce::String& text, bool active) {
+  void set(const juce::String& text, bool active, const juce::String& bank, bool pending) {
     text_ = text;
     active_ = active;
+    bank_ = bank;
+    pending_ = pending;
+    setName(bank.isEmpty() ? text : bank + ", " + text + (pending ? ", choose a preset" : ""));
     repaint();
   }
   void paintButton(juce::Graphics& g, bool, bool) override {
-    paint::text(g, text_, getLocalBounds().reduced(6, 0), Fonts::sans(14),
+    auto area = getLocalBounds().reduced(6, 0);
+    if (bank_.isNotEmpty()) {
+      const auto label = pending_ ? "! " + bank_ : bank_;
+      paint::text(g, label, area.removeFromTop(16), Fonts::sans(11, true),
+                  pending_ ? kBankWarning : kMutedText, juce::Justification::centred);
+    }
+    paint::text(g, text_, area, Fonts::sans(14),
                 active_ ? theme::kWhite : kMutedText, juce::Justification::centred);
   }
 
 private:
   juce::String text_;
+  juce::String bank_;
   bool active_ = false;
+  bool pending_ = false;
 };
 
 // Save popover
@@ -141,7 +153,9 @@ public:
     const auto box = getLocalBounds().toFloat();
     paint::fill(g, box, theme::kPanelCorner, theme::kPanelBg);
     paint::border(g, box, theme::kPanelCorner, theme::kBorder);
-    paint::text(g, "Save Preset", contentBounds().reduced(kPad).removeFromTop(kTitleHeight),
+    auto bank = owner_.selectedBankName();
+    paint::text(g, bank.isEmpty() ? juce::String("Save Preset") : "Save to " + bank,
+                contentBounds().reduced(kPad).removeFromTop(kTitleHeight),
                 Fonts::sans(14, true), theme::kWhite);
     // Outline pill: border rgba(235,235,245,0.6), label white / muted.
     const bool enabled = name_.text().trim().isNotEmpty();
@@ -204,6 +218,21 @@ public:
       rebuild();
     };
     addChildComponent(reorderToggle_);
+    newBank_.setHelpText("Create a preset bank");
+    newBank_.setName("New Bank");
+    newBank_.onClick = [this] { editBankName(std::nullopt); };
+    addChildComponent(newBank_);
+    previousBank_.setHelpText("Previous Bank");
+    previousBank_.setName("Previous Bank");
+    previousBank_.onClick = [this] { owner_.services_.presets.stepPresetBank(-1); };
+    addChildComponent(previousBank_);
+    nextBank_.setHelpText("Next Bank");
+    nextBank_.setName("Next Bank");
+    nextBank_.onClick = [this] { owner_.services_.presets.stepPresetBank(1); };
+    addChildComponent(nextBank_);
+    bankDropLine_.setColour(juce::Label::backgroundColourId, theme::kWhite);
+    bankDropLine_.setInterceptsMouseClicks(false, false);
+    content_.addChildComponent(bankDropLine_);
 
     viewport_.setViewedComponent(&content_, false);
     addAndMakeVisible(viewport_);
@@ -221,7 +250,8 @@ public:
 
   // Store refresh: drop the optimistic order unless a drag is in flight.
   void presetsChanged() {
-    if (!dragging_) ordered_.reset();
+    if (dragging_) return;
+    ordered_.reset();
     if (isOpen()) rebuild();
   }
 
@@ -234,6 +264,15 @@ public:
   void resized() override {
     auto area = contentBounds().reduced(kPad, 0).withTrimmedTop(kPad);
     auto row = area.removeFromTop(kSearchHeight);
+    if (newBank_.isVisible()) {
+      newBank_.setBounds(row.removeFromRight(29).withSizeKeepingCentre(29, 29));
+      row.removeFromRight(6);
+    }
+    if (nextBank_.isVisible()) {
+      nextBank_.setBounds(row.removeFromRight(21).withSizeKeepingCentre(21, 29));
+      previousBank_.setBounds(row.removeFromRight(21).withSizeKeepingCentre(21, 29));
+      row.removeFromRight(6);
+    }
     // Row: search (flex 1) · [PC toggle] · [reorder toggle], gap 6.
     if (reorderToggle_.isVisible())
       reorderToggle_.setBounds(row.removeFromRight(29).withSizeKeepingCentre(29, 29)),
@@ -247,8 +286,9 @@ public:
 
 private:
   class Row;
+  class BankHeader;
 
-  bool showPc() const { return owner_.services_.prefs.getBool(UiPrefs::kShowPresetPcNumbers, false); }
+  bool showPc() const { return owner_.services_.prefs.getBool(UiPrefs::kShowPresetPcNumbers, banked()); }
   const std::vector<PresetInfo>& fullList() const {
     return ordered_ ? *ordered_ : owner_.presets();
   }
@@ -261,22 +301,80 @@ private:
   // Drag-reorder within a section (grip in reorder mode).
   std::vector<Row*> sectionOf(const Row& row) const;
   void beginDrag(Row& row);
-  void dragTo(Row& row, int dy);
+  void dragTo(Row& row, const juce::MouseEvent& event);
   void endDrag(Row& row);
+  void editBankName(std::optional<PresetBankInfo> bank);
+  void confirmDeleteBank(const PresetBankInfo& bank);
+  void copyToBank(const PresetInfo& preset, juce::Component& anchor);
+  bool banked() const { return !owner_.services_.presets.banks().empty(); }
 
   PresetBar& owner_;
   TextField search_;
   GlyphButton pcToggle_{Icon::MidiPort, 15, 7, help::Key::presetPcToggle};
   GlyphButton reorderToggle_{Icon::ArrowUpDown, 15, 7, help::Key::presetReorder};
+  IconButton newBank_{Icon::Plus, 28};
+  Chevron previousBank_{Icon::ChevronLeft, help::Key::presetPrev};
+  Chevron nextBank_{Icon::ChevronRight, help::Key::presetNext};
   DragScroller viewport_{DragScroller::Axis::vertical, DragScroller::Keys::none};  // the arrows walk the rows
   juce::Component content_;
   std::vector<std::unique_ptr<juce::Component>> items_;  // headers, rows, empty text
   std::vector<Row*> rows_;
+  std::vector<BankHeader*> bankHeaders_;
+  juce::Label bankDropLine_;
   juce::String renamingId_;
   bool reordering_ = false;
   std::optional<std::vector<PresetInfo>> ordered_;
   bool dragging_ = false;
   int dragStartY_ = 0, dragSectionTop_ = 0, dragTarget_ = 0;
+  juce::String dragBank_;
+  bool hasBankDrop_ = false;
+};
+
+class PresetBar::BrowsePanel::BankHeader : public juce::Component {
+public:
+  BankHeader(BrowsePanel& panel, PresetBankInfo bank, bool selected)
+      : bank_(std::move(bank)), name_(bank_.name), selected_(selected) {
+    name_.onClick = [&panel, id = bank_.id] { panel.owner_.services_.presets.selectPresetBank(id); };
+    addAndMakeVisible(name_);
+    if (bank_.id.isEmpty()) return;
+    rename_.setHelpText("Rename Bank");
+    rename_.setName("Rename Bank");
+    rename_.onClick = [&panel, bank = bank_] { panel.editBankName(bank); };
+    addAndMakeVisible(rename_);
+    remove_.setHelpText("Delete Bank");
+    remove_.setName("Delete Bank");
+    remove_.onClick = [&panel, bank = bank_] { panel.confirmDeleteBank(bank); };
+    addAndMakeVisible(remove_);
+  }
+
+  const juce::String& id() const { return bank_.id; }
+
+  void resized() override {
+    auto area = getLocalBounds().reduced(4, 0);
+    if (bank_.id.isNotEmpty()) {
+      remove_.setBounds(area.removeFromRight(25).withSizeKeepingCentre(20, 20));
+      rename_.setBounds(area.removeFromRight(25).withSizeKeepingCentre(20, 20));
+    }
+    name_.setBounds(area);
+  }
+
+  void paint(juce::Graphics& g) override {
+    if (selected_) paint::fill(g, getLocalBounds().toFloat(), 6.0f, theme::kSegmentedTrack);
+    paint::text(g, bank_.name, name_.getBounds().reduced(4, 0), Fonts::sans(14, true),
+                selected_ ? theme::kWhite : kMutedText);
+  }
+
+private:
+  class Hit : public Clickable {
+  public:
+    using Clickable::Clickable;
+    void paintButton(juce::Graphics&, bool, bool) override {}
+  };
+  PresetBankInfo bank_;
+  Hit name_;
+  bool selected_;
+  GlyphButton rename_{Icon::Pencil, 13, 3, help::Key::presetRename};
+  GlyphButton remove_{Icon::Trash2, 13, 3, help::Key::presetDelete};
 };
 
 class PresetBar::BrowsePanel::Row : public juce::Component {
@@ -310,7 +408,18 @@ public:
       grip_->setViewportIgnoreDragFlag(true);  // a drag on the grip sorts the row; the list does not pan
       grip_->addMouseListener(this, false);
       addAndMakeVisible(*grip_);
-    } else if (!preset_.factory && !renaming_) {
+    } else if (!renaming_) {
+      if (panel_.banked()) {
+        copy_ = std::make_unique<GlyphButton>(Icon::Copy, 13, 3, help::Key::presetBrowse);
+        copy_->setName("Copy Preset to Bank");
+        copy_->setHelpText("Copy Preset to Bank");
+        copy_->onClick = [this] { panel_.copyToBank(preset_, *copy_); };
+        addAndMakeVisible(*copy_);
+      }
+      if (preset_.factory) {
+        setSize(0, kRowHeight);
+        return;
+      }
       pencil_ = std::make_unique<GlyphButton>(Icon::Pencil, 13, 3, help::Key::presetRename);
       pencil_->onClick = [this] {
         panel_.renamingId_ = preset_.id;
@@ -353,6 +462,7 @@ public:
     if (grip_) takeRight(*grip_);
     if (trash_) takeRight(*trash_);
     if (pencil_) takeRight(*pencil_);
+    if (copy_) takeRight(*copy_);
     if (pc_) {
       pcArea_ = area.removeFromRight(pcLabelWidth(*pc_));
       area.removeFromRight(8);
@@ -367,7 +477,7 @@ public:
   }
   void mouseDrag(const juce::MouseEvent& e) override {
     if (grip_ && e.eventComponent == grip_.get())
-      panel_.dragTo(*this, e.getDistanceFromDragStartY());
+      panel_.dragTo(*this, e);
   }
   void mouseUp(const juce::MouseEvent& e) override {
     if (grip_ && e.eventComponent == grip_.get()) panel_.endDrag(*this);
@@ -405,7 +515,7 @@ private:
   bool renaming_;
   NameButton name_{preset_.name, active_};
   std::unique_ptr<TextField> rename_;
-  std::unique_ptr<GlyphButton> grip_, pencil_, trash_;
+  std::unique_ptr<GlyphButton> grip_, pencil_, trash_, copy_;
   juce::Rectangle<int> pcArea_;
 };
 
@@ -413,6 +523,7 @@ void PresetBar::BrowsePanel::rebuild() {
   // Keep the search field's text; everything below it is regenerated.
   items_.clear();
   rows_.clear();
+  bankHeaders_.clear();
 
   const auto& presets = owner_.presets();
   const auto& list = fullList();
@@ -422,9 +533,12 @@ void PresetBar::BrowsePanel::rebuild() {
     if (query.isEmpty() || p.name.toLowerCase().contains(query)) filtered.push_back(p);
 
   pcToggle_.setVisible(!presets.empty());
+  newBank_.setVisible(owner_.services_.chain.state().standalone);
+  previousBank_.setVisible(banked());
+  nextBank_.setVisible(banked());
   pcToggle_.setColour(showPc() ? theme::kWhite : kMutedText);
   pcToggle_.setFilled(showPc());
-  reorderToggle_.setVisible(presets.size() > 1);
+  reorderToggle_.setVisible(presets.size() > 1 || (banked() && !presets.empty()));
   reorderToggle_.setColour(reordering_ ? theme::kWhite : kMutedText);
   reorderToggle_.setFilled(reordering_);
 
@@ -433,14 +547,25 @@ void PresetBar::BrowsePanel::rebuild() {
   const bool canDrag = reordering_ && query.isEmpty();
   // PC n loads the nth preset of the full list; the wire only carries 0-127.
   std::map<juce::String, int> pcById;
-  for (size_t i = 0; i < list.size() && i <= 127; ++i) pcById[list[i].id] = static_cast<int>(i);
+  std::map<juce::String, int> bankSlots;
+  for (size_t i = 0; i < list.size(); ++i) {
+    const auto& preset = list[i];
+    if (banked() && preset.factory) continue;
+    const auto slot = banked() ? bankSlots[preset.bankId]++ : static_cast<int>(i);
+    if (slot <= 127) pcById[preset.id] = slot;
+  }
 
   const auto activeId = owner_.active() ? owner_.active()->id : juce::String();
-  auto addSection = [&](const char* title, bool factory) {
+  auto addSection = [&](const juce::String& title, bool factory, const PresetBankInfo* bank = nullptr) {
     int index = 0;
-    bool any = false;
+    bool any = bank != nullptr;
+    if (bank) {
+      auto header = std::make_unique<BankHeader>(*this, *bank, bank->id == owner_.selectedBankId());
+      bankHeaders_.push_back(header.get());
+      items_.push_back(std::move(header));
+    }
     for (const auto& p : filtered) {
-      if (p.factory != factory) continue;
+      if (p.factory != factory || (bank && p.bankId != bank->id)) continue;
       if (!any) {
         items_.push_back(std::make_unique<Label>(title, Fonts::sans(14, true), theme::kGray,
                                                  juce::BorderSize<int>(8, 4, 8, 4)));
@@ -449,15 +574,21 @@ void PresetBar::BrowsePanel::rebuild() {
       std::optional<int> pc;
       if (showPc())
         if (auto it = pcById.find(p.id); it != pcById.end()) pc = it->second;
-      auto row = std::make_unique<Row>(*this, p, index++, p.id == activeId, canDrag, pc,
+      auto row = std::make_unique<Row>(*this, p, index++, p.id == activeId,
+                                       canDrag && !(banked() && p.factory), pc,
                                        renamingId_ == p.id);
       rows_.push_back(row.get());
       items_.push_back(std::move(row));
     }
   };
-  addSection("Your Presets", false);
+  if (banked()) {
+    for (const auto& bank : owner_.services_.presets.banks())
+      addSection(bank.name, false, &bank);
+  } else {
+    addSection("Your Presets", false);
+  }
   addSection("TONE3000", true);
-  if (filtered.empty())
+  if (filtered.empty() && (!banked() || query.isNotEmpty()))
     items_.push_back(std::make_unique<Label>(
         presets.empty() ? "No presets yet. Save one to get started." : "No matches.", Fonts::sans(13),
         kMutedText, juce::BorderSize<int>(12, 4, 12, 4)));
@@ -471,6 +602,56 @@ void PresetBar::BrowsePanel::rebuild() {
   reposition();
   for (auto* row : rows_)
     if (row->preset().id == renamingId_) row->focusRename();
+}
+
+void PresetBar::BrowsePanel::editBankName(std::optional<PresetBankInfo> bank) {
+  auto safe = juce::Component::SafePointer<PresetBar>(&owner_);
+  close();
+  auto dialog = std::make_shared<juce::AlertWindow>(bank ? "Rename Bank" : "New Bank", "Bank name",
+                                                     juce::MessageBoxIconType::NoIcon, &owner_);
+  dialog->addTextEditor("name", bank ? bank->name : juce::String());
+  dialog->addButton(bank ? "Rename" : "Create", 1, juce::KeyPress(juce::KeyPress::returnKey));
+  dialog->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+  dialog->enterModalState(true, juce::ModalCallbackFunction::create(
+      [safe, dialog, bank](int result) {
+        if (!safe) return;
+        if (result == 1) {
+          const auto name = dialog->getTextEditorContents("name").trim();
+          auto& store = safe->services_.presets;
+          const bool saved = name.isNotEmpty() &&
+                             (bank ? store.renamePresetBank(bank->id, name) : store.createPresetBank(name));
+          if (!saved) safe->services_.toast.show("Bank name could not be saved");
+        }
+        safe->openBrowsePanel();
+      }));
+}
+
+void PresetBar::BrowsePanel::confirmDeleteBank(const PresetBankInfo& bank) {
+  auto safe = juce::Component::SafePointer<PresetBar>(&owner_);
+  close();
+  juce::AlertWindow::showOkCancelBox(juce::MessageBoxIconType::WarningIcon,
+      "Delete " + bank.name + "?",
+      "This will permanently delete the bank and all presets in it.",
+      "Delete Bank", "Cancel", &owner_,
+      juce::ModalCallbackFunction::create([safe, id = bank.id](int confirmed) {
+        if (!safe) return;
+        if (confirmed && !safe->services_.presets.deletePresetBank(id))
+          safe->services_.toast.show("Bank could not be deleted");
+        safe->openBrowsePanel();
+      }));
+}
+
+void PresetBar::BrowsePanel::copyToBank(const PresetInfo& preset, juce::Component& anchor) {
+  auto safe = juce::Component::SafePointer<PresetBar>(&owner_);
+  juce::PopupMenu menu;
+  menu.addSectionHeader("Copy Preset to Bank");
+  for (const auto& bank : owner_.services_.presets.banks())
+    menu.addItem(bank.name, [safe, presetId = preset.id, bankId = bank.id] {
+      if (!safe) return;
+      const bool copied = safe->services_.presets.copyPresetToBank(presetId, bankId);
+      safe->services_.toast.show(copied ? "Preset Copied" : "Preset could not be copied");
+    });
+  menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&anchor));
 }
 
 void PresetBar::BrowsePanel::layoutRows() {
@@ -503,9 +684,43 @@ void PresetBar::BrowsePanel::beginDrag(Row& row) {
   dragStartY_ = row.getY();
   dragSectionTop_ = dragStartY_ - row.sectionIndex() * kRowHeight;
   dragTarget_ = row.sectionIndex();
+  hasBankDrop_ = false;
+  if (banked()) juce::Component::beginDragAutoRepeat(40);
 }
 
-void PresetBar::BrowsePanel::dragTo(Row& row, int dy) {
+void PresetBar::BrowsePanel::dragTo(Row& row, const juce::MouseEvent& event) {
+  if (banked()) {
+    const auto screen = event.getScreenPosition();
+    const auto viewY = viewport_.getLocalPoint(nullptr, screen).y;
+    if (viewY < 16 || viewY > viewport_.getHeight() - 16)
+      viewport_.setViewPosition(0, viewport_.getViewPositionY() + (viewY < 16 ? -14 : 14));
+    const auto point = content_.getLocalPoint(nullptr, screen);
+    hasBankDrop_ = false;
+    for (const auto* header : bankHeaders_)
+      if (header->getBounds().contains(point)) {
+        dragBank_ = header->id();
+        dragTarget_ = 0;
+        bankDropLine_.setBounds(0, header->getBottom() - 2, content_.getWidth(), 2);
+        hasBankDrop_ = true;
+        break;
+      }
+    for (const auto* target : rows_)
+      if (!target->preset().factory && target->getBounds().contains(point)) {
+        const bool after = point.y >= target->getY() + kRowHeight / 2;
+        dragBank_ = target->preset().bankId;
+        dragTarget_ = target->sectionIndex() + (after ? 1 : 0);
+        if (dragBank_ == row.preset().bankId && row.sectionIndex() < dragTarget_)
+          --dragTarget_;
+        bankDropLine_.setBounds(0, after ? target->getBottom() - 1 : target->getY(),
+                                content_.getWidth(), 2);
+        hasBankDrop_ = true;
+        break;
+      }
+    bankDropLine_.setVisible(hasBankDrop_);
+    if (hasBankDrop_) bankDropLine_.toFront(false);
+    return;
+  }
+  const int dy = event.getDistanceFromDragStartY();
   // Follow the pointer, clamped to the row's own section; slide siblings
   // out of the way so the drop position reads live.
   const auto section = sectionOf(row);
@@ -531,6 +746,17 @@ void PresetBar::BrowsePanel::endDrag(Row& row) {
   // every Row including this one, so `row` is dead from that point on.
   const juce::String id = row.preset().id;
   const bool factory = row.preset().factory;
+  if (banked()) {
+    juce::Component::beginDragAutoRepeat(0);
+    bankDropLine_.setVisible(false);
+    if (hasBankDrop_ && (dragBank_ != row.preset().bankId || to != from)) {
+      if (!owner_.services_.presets.movePresetToBank(id, dragBank_, to))
+        owner_.services_.toast.show("Preset could not be moved");
+    } else {
+      rebuild();
+    }
+    return;
+  }
   if (to == from) {
     layoutRows();
     return;
@@ -609,16 +835,43 @@ void PresetBar::prefChanged(const juce::String& key) {
   if (key == UiPrefs::kShowPresetPcNumbers) browsePanel_->presetsChanged();
 }
 
+juce::String PresetBar::selectedBankId() const {
+  const auto& id = services_.chain.state().presetBank;
+  for (const auto& bank : services_.presets.banks())
+    if (bank.id == id) return id;
+  return {};
+}
+
+juce::String PresetBar::selectedBankName() const {
+  const auto id = selectedBankId();
+  for (const auto& bank : services_.presets.banks())
+    if (bank.id == id) return bank.name;
+  return {};
+}
+
 void PresetBar::refreshChrome() {
-  const bool any = !presets().empty();
+  const auto bank = selectedBankId();
+  const auto bankName = selectedBankName();
+  const auto eligible = [&](const PresetInfo& preset) {
+    return bankName.isEmpty() || (!preset.factory && preset.bankId == bank);
+  };
+  const bool any = std::any_of(presets().begin(), presets().end(), eligible);
+  const bool pending = bankName.isNotEmpty() &&
+                       (!active() || std::none_of(presets().begin(), presets().end(), [&](const auto& preset) {
+                          return preset.id == active()->id && eligible(preset);
+                        }));
   prev_->setLit(any);
   next_->setLit(any);
-  name_->set(active() ? active()->name : juce::String("Presets"), active().has_value());
+  name_->set(active() ? active()->name : juce::String("Presets"), active().has_value(), bankName, pending);
   newButton_.setEnabled(!services_.chain.state().atDefault);
 }
 
 void PresetBar::step(int direction) {
-  const auto& list = presets();
+  std::vector<PresetInfo> list;
+  const auto bank = selectedBankId();
+  const bool banked = !services_.presets.banks().empty();
+  for (const auto& preset : presets())
+    if (!banked || (!preset.factory && preset.bankId == bank)) list.push_back(preset);
   if (list.empty()) return;
   int index = -1;
   if (active())
@@ -652,7 +905,8 @@ void PresetBar::openSavePanel() {
   juce::String prefill;
   if (active())
     for (const auto& p : presets())
-      if (p.id == active()->id && !p.factory) prefill = p.name;
+      if (p.id == active()->id && !p.factory &&
+          (services_.presets.banks().empty() || p.bankId == selectedBankId())) prefill = p.name;
   savePanel_->show(prefill);
 }
 

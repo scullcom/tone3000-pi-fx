@@ -99,6 +99,13 @@ public:
   virtual bool renamePreset(const juce::String& presetId, const juce::String& newName) = 0;
   virtual bool deletePreset(const juce::String& presetId) = 0;
   virtual bool movePreset(const juce::String& presetId, int delta) = 0;
+  virtual bool createPresetBank(const juce::String&) { return false; }
+  virtual bool renamePresetBank(const juce::String&, const juce::String&) { return false; }
+  virtual bool deletePresetBank(const juce::String&) { return false; }
+  virtual bool selectPresetBank(const juce::String&) { return false; }
+  virtual bool stepPresetBank(int) { return false; }
+  virtual bool movePresetToBank(const juce::String&, const juce::String&, int) { return false; }
+  virtual bool copyPresetToBank(const juce::String&, const juce::String&) { return false; }
 
   // Audio device settings (standalone only; void var elsewhere)
   virtual juce::var getAudioDeviceState() = 0;
