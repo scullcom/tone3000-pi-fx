@@ -245,7 +245,9 @@ TEST(PresetManagerTest, BanksPersistOrderAndCopiesRemainIndependent) {
   const auto banks = fresh.banks();
   ASSERT_EQ(banks.size(), 3u);
   EXPECT_EQ(banks[1].name, "Rock / Friday");
-  EXPECT_EQ(banks[1].presets, juce::StringArray({lead.id, original.id}));
+  ASSERT_EQ(banks[1].presets.size(), 2);
+  EXPECT_EQ(banks[1].presets[0], lead.id);
+  EXPECT_EQ(banks[1].presets[1], original.id);
   ASSERT_EQ(banks[2].presets.size(), 1);
   const auto copy = banks[2].presets[0];
   EXPECT_NE(copy, original.id);
