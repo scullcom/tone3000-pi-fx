@@ -2,6 +2,12 @@
 
 Notable changes to the TONE3000 FX Raspberry Pi releases.
 
+## [1.3.0] - 2026-11-23
+
+- **Export** and **Import** in the Settings and Login menu support selective USB backups of user presets and banks, including empty banks. Export writes to `/Tone3000-pi-fx/presets` and replaces the existing backup only after the new one has been written.
+- Import merges banks by name and overwrites matching preset names within the destination bank. Names are matched case-insensitively. New banks and presets are added in backup order.
+- The desktop installer includes UDisks. Custom kiosk images can use the included USB mount policy for the kiosk account.
+
 ## [1.2.0] - 2026-11-23
 
 ### Added
@@ -38,6 +44,7 @@ Notable changes to the TONE3000 FX Raspberry Pi releases.
 - Search installed effects and keep a list of Favourites. Install Guitarix effects and matching pedal artwork, with the option to supply custom images.
 - TONE3000 catalogue sign-in and the offline **Clean Trem and Verb** factory demo.
 
+[1.3.0]: https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.3.0
 [1.2.0]: https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.2.0
 [1.1.0]: https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.1.0
 [1.0.0]: https://github.com/scullcom/tone3000-pi-fx/releases/tag/v1.0.0

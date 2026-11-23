@@ -8,7 +8,11 @@ TONE3000 FX is a community fork of the TONE3000 standalone app for Raspberry Pi 
 
 ![Clean amp, tremolo, and stereo reverb in the TONE3000 FX signal chain](docs/screenshots/pi-signal-chain.png)
 
-## What's new in v1.2.0
+## What's new in v1.3.0
+
+Back up your presets to a USB drive from the Settings and Login menu. **Export** lets you select whole banks or individual presets. **Import** merges banks by name and overwrites matching presets within the destination bank. [USB preset backup instructions](#usb-preset-backups)
+
+## Quality-of-life features
 
 - **Tune silently.** Turn on **Mute Audio in Tuner** under **Settings → System Settings**. The tuner still reads your guitar while the output is muted. Closing the tuner restores the output.
 - **Manage effects from the block view.** Open an LV2 block to change its controls, choose custom artwork beside the plugin name, or use **Switch** and **Delete** on the right. Switching keeps the effect in the same slot.
@@ -32,7 +36,7 @@ Run it as your regular desktop user. The installer uses `sudo` for missing syste
 If you already have Git, you can clone a release tag directly.
 
 ```sh
-git clone --branch v1.2.0 --recurse-submodules https://github.com/scullcom/tone3000-pi-fx.git
+git clone --branch v1.3.0 --recurse-submodules https://github.com/scullcom/tone3000-pi-fx.git
 cd tone3000-pi-fx
 bash install.sh
 ```
@@ -74,11 +78,11 @@ Use a bank's pencil to rename it. Confirming **Delete Bank** deletes the bank an
 
 ## USB preset backups
 
-On the `preset_io` branch, choose **Export** or **Import** in the Settings and Login menu. Insert a USB drive and tick individual user presets or a bank to select everything in it. The backup uses `/Tone3000-pi-fx/presets` on the USB drive. Exporting replaces the contents of that folder after the new backup has been written.
+From **v1.3.0**, choose **Export** or **Import** in the Settings and Login menu. Insert a USB drive and tick individual user presets or a bank to select everything in it. The backup uses `/Tone3000-pi-fx/presets` on the USB drive. Exporting replaces the contents of that folder after the new backup has been written.
 
 Import merges banks with the same name and replaces matching preset names within each destination bank. Name matching is case-insensitive. New banks and presets are added, and factory presets are excluded. Existing presets elsewhere stay in their own banks.
 
-The Pi installer includes UDisks for mounting removable drives. To use this branch in a custom kiosk image, include `udisks2` and install `resources/kiosk/49-tone3000-preset-usb.rules` under `/etc/polkit-1/rules.d/` as root. The rule is limited to mounting removable USB filesystems for the `tone-kiosk` account.
+The desktop installer includes UDisks for mounting removable drives. A kiosk image needs to be rebuilt with v1.3.0, `udisks2`, and the [USB mount policy](resources/kiosk/49-tone3000-preset-usb.rules) installed under `/etc/polkit-1/rules.d/` as root. The rule permits the `tone-kiosk` account to mount removable USB filesystems.
 
 ## Credits and licences
 
