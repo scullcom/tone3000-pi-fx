@@ -168,6 +168,74 @@ TEST(Lv2ChainTest, GuitarixDisplayLabelsKeepTheirPortIds) {
   if (checked == 0) GTEST_SKIP() << "Requires at least one of the Guitarix effects under test";
 }
 
+#if JUCE_ARM
+TEST(Lv2ChainTest, GuitarixTapeStereoIsSkippedOnArm) {
+  PresetDirectory presets;
+  auto proc = makeProcessor(presets.dir);
+  if (!proc->supportsLv2()) GTEST_SKIP() << "Requires a Linux LV2 host build";
+
+  constexpr auto stereoUri = "http://guitarix.sourceforge.net/plugins/gxtape_st#tape";
+  constexpr auto monoUri = "http://guitarix.sourceforge.net/plugins/gxtape#tape";
+  const auto effects = std::make_shared<std::optional<juce::var>>();
+  proc->scanLv2Effects([effects](juce::var found) { effects->emplace(std::move(found)); });
+  ASSERT_TRUE(waitUntil([&] { return effects->has_value(); }));
+  const auto* installed = effects->value().getArray();
+  ASSERT_NE(installed, nullptr);
+  EXPECT_TRUE(std::none_of(installed->begin(), installed->end(), [](const auto& row) {
+    return row["uri"].toString() == stereoUri;
+  }));
+
+  auto rig = makeRig();
+  proc->restoreFromTree(rig);
+  ASSERT_TRUE(waitForChainLoaded(*proc));
+  juce::ValueTree tape("ChainBlock");
+  tape.setProperty("type", "lv2", nullptr);
+  tape.setProperty("id", "stereo-tape", nullptr);
+  tape.setProperty("lv2Uri", stereoUri, nullptr);
+  tape.setProperty("lv2Name", "Gx Tape Stereo", nullptr);
+  juce::ValueTree params("Lv2Parameters");
+  juce::ValueTree drive("Param");
+  drive.setProperty("id", "sym:drive", nullptr);
+  drive.setProperty("value", 0.75f, nullptr);
+  params.appendChild(drive, nullptr);
+  tape.appendChild(params, nullptr);
+  rig.getChildWithName("ChainBlocks").appendChild(tape, nullptr);
+
+  const auto input = makeNoise(120 * blockSize, 416, 0.1f);
+  const auto expected = processStereo(*proc, input);
+  auto restored = makeProcessor(presets.dir);
+  restored->restoreFromTree(rig);
+  ASSERT_TRUE(waitUntil([&] {
+    return static_cast<bool>(rowFor(*restored, "stereo-tape")["loadFailed"]);
+  }));
+  ASSERT_TRUE(waitForChainLoaded(*restored));
+  EXPECT_EQ(rowFor(*restored, "stereo-tape")["lv2Error"].toString(),
+            "Gx Tape Stereo crashes on ARM. Use Gx Tape instead.");
+  const auto actual = processStereo(*restored, input);
+  EXPECT_LE(settledMaxChannelDiff(expected.first, actual.first), 1e-6f);
+  EXPECT_LE(settledMaxChannelDiff(expected.second, actual.second), 1e-6f);
+  const auto saved = restored->savePreset("Stereo tape recovery")["id"].toString();
+  ASSERT_TRUE(saved.isNotEmpty());
+  const auto persisted = PresetManager(presets.dir).load(saved).getChildWithName("ChainSnapshot")
+                             .getChildWithName("ChainBlocks")
+                             .getChildWithProperty("id", "stereo-tape");
+  EXPECT_EQ(persisted["lv2Uri"].toString(), stereoUri);
+  EXPECT_FLOAT_EQ(static_cast<float>(persisted.getChildWithName("Lv2Parameters")
+                                         .getChildWithProperty("id", "sym:drive")["value"]), 0.75f);
+
+  if (std::none_of(installed->begin(), installed->end(), [](const auto& row) {
+        return row["uri"].toString() == monoUri;
+      })) return;
+  ASSERT_TRUE(restored->swapLv2Effect("stereo-tape", monoUri, {}));
+  ASSERT_TRUE(waitUntil([&] { return static_cast<bool>(rowFor(*restored, "stereo-tape")["loaded"]); }));
+  restored->setStereoMode(true);
+  const auto wet = processStereoLR(*restored, input, makeNoise(input.size(), 419, 0.1f));
+  EXPECT_TRUE(std::all_of(wet.first.begin(), wet.first.end(), [](float x) { return std::isfinite(x); }));
+  EXPECT_TRUE(std::all_of(wet.second.begin(), wet.second.end(), [](float x) { return std::isfinite(x); }));
+  EXPECT_GT(settledMaxChannelDiff(wet.first, wet.second), 0.001f);
+}
+#endif
+
 TEST(Lv2ChainTest, NativeDelayAndReverbRestoreSettingsAndProduceStereo) {
   PresetDirectory presets;
   auto proc = makeProcessor(presets.dir);

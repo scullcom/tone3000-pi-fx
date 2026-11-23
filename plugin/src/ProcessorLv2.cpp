@@ -302,6 +302,18 @@ bool TONE3000Processor::supportsLv2() const {
 
 #if T3K_ENABLE_LV2_HOST
 namespace {
+juce::String lv2Incompatibility(const juce::String& uri) {
+#if JUCE_ARM
+  // Guitarix's non-SSE stereo tape path calls stereo_audio on its mono
+  // noiser, where that callback is null. This also affects Guitarix 0.47.
+  if (uri == "http://guitarix.sourceforge.net/plugins/gxtape_st#tape")
+    return "Gx Tape Stereo crashes on ARM. Use Gx Tape instead.";
+#else
+  juce::ignoreUnused(uri);
+#endif
+  return {};
+}
+
 bool isSupported(const juce::PluginDescription& desc) {
   return !desc.isInstrument && desc.numInputChannels >= 1 && desc.numInputChannels <= 2
          && desc.numOutputChannels >= 1 && desc.numOutputChannels <= 2;
@@ -321,7 +333,7 @@ void TONE3000Processor::scanLv2Effects(Lv2Effect::ScanCallback callback) {
         juce::OwnedArray<juce::PluginDescription> descriptions;
         format.findAllTypesForFile(descriptions, bundle);
         for (const auto* desc : descriptions)
-          if (isSupported(*desc))
+          if (isSupported(*desc) && lv2Incompatibility(desc->fileOrIdentifier).isEmpty())
             names.emplace(desc->fileOrIdentifier, desc->name);
       }
       juce::Array<juce::var> effects;
@@ -406,14 +418,17 @@ void TONE3000Processor::queueLv2Load(ChainBlock& block, const juce::String& repl
                                                        finished = std::move(finished)] {
     auto format = std::make_shared<juce::LV2PluginFormatHeadless>();
     juce::OwnedArray<juce::PluginDescription> descriptions;
+    const auto incompatibility = lv2Incompatibility(uri);
     // Presets can request installed plugin URIs only. Never interpret them as bundle paths.
-    if (!juce::File::isAbsolutePath(uri) && format->fileMightContainThisPluginType(uri))
+    if (incompatibility.isEmpty() && !juce::File::isAbsolutePath(uri)
+        && format->fileMightContainThisPluginType(uri))
       format->findAllTypesForFile(descriptions, uri);
     const auto description = descriptions.isEmpty() ? juce::PluginDescription() : *descriptions[0];
 
     // JUCE's plugin creation API runs on the message thread. Discovery runs in the pool
     // and neither creation nor preparation holds the audio chain lock.
-    juce::MessageManager::callAsync([this, foregroundLifetime, format, description, id, ticket, uri, swapping, finished] {
+    juce::MessageManager::callAsync([this, foregroundLifetime, format, description, incompatibility,
+                                    id, ticket, uri, swapping, finished] {
       if (foregroundLifetime.expired())
         return;
       {
@@ -425,7 +440,9 @@ void TONE3000Processor::queueLv2Load(ChainBlock& block, const juce::String& repl
 
       juce::String error;
       std::shared_ptr<Lv2Effect> effect;
-      if (description.fileOrIdentifier.isEmpty()) {
+      if (incompatibility.isNotEmpty()) {
+        error = incompatibility;
+      } else if (description.fileOrIdentifier.isEmpty()) {
         error = "Effect is missing";
       } else if (!isSupported(description)) {
         error = "Effect needs a mono or stereo audio input and output";
