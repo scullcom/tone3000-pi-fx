@@ -168,27 +168,38 @@ TEST(Lv2ChainTest, GuitarixDisplayLabelsKeepTheirPortIds) {
   if (checked == 0) GTEST_SKIP() << "Requires at least one of the Guitarix effects under test";
 }
 
-TEST(Lv2ChainTest, GuitarixTunerIsUnavailable) {
+TEST(Lv2ChainTest, ExcludedGuitarixEffectsAreUnavailable) {
   PresetDirectory presets;
   auto proc = makeProcessor(presets.dir);
   if (!proc->supportsLv2()) GTEST_SKIP() << "Requires a Linux LV2 host build";
 
-  constexpr auto uri = "http://guitarix.sourceforge.net/plugins/gxtuner#tuner";
   const auto effects = std::make_shared<std::optional<juce::var>>();
   proc->scanLv2Effects([effects](juce::var found) { effects->emplace(std::move(found)); });
   ASSERT_TRUE(waitUntil([&] { return effects->has_value(); }));
   const auto* installed = effects->value().getArray();
   ASSERT_NE(installed, nullptr);
-  EXPECT_TRUE(std::none_of(installed->begin(), installed->end(), [](const auto& row) {
-    return row["uri"].toString() == uri;
-  }));
-
-  const auto id = proc->addLv2Effect(emptySlot(*proc), uri, "GxTuner");
-  ASSERT_FALSE(id.empty());
-  ASSERT_TRUE(waitUntil([&] { return static_cast<bool>(rowFor(*proc, id)["loadFailed"]); }));
-  EXPECT_FALSE(static_cast<bool>(rowFor(*proc, id)["loaded"]));
-  EXPECT_EQ(rowFor(*proc, id)["lv2Error"].toString(),
-            "GxTuner is unavailable. Use the built-in TONE3000 tuner instead.");
+  struct Effect {
+    const char* uri;
+    const char* name;
+    const char* message;
+  };
+  const Effect excluded[] = {
+      {"http://guitarix.sourceforge.net/plugins/gxtuner#tuner", "GxTuner",
+       "GxTuner is unavailable. Use the built-in TONE3000 tuner instead."},
+      {"http://guitarix.sourceforge.net/plugins/gx_detune_#_detune_", "GxDetune",
+       "GxDetune is unavailable in TONE3000."},
+  };
+  for (const auto& [uri, name, message] : excluded) {
+    SCOPED_TRACE(uri);
+    EXPECT_TRUE(std::none_of(installed->begin(), installed->end(), [&](const auto& row) {
+      return row["uri"].toString() == uri;
+    }));
+    const auto id = proc->addLv2Effect(emptySlot(*proc), uri, name);
+    ASSERT_FALSE(id.empty());
+    ASSERT_TRUE(waitUntil([&] { return static_cast<bool>(rowFor(*proc, id)["loadFailed"]); }));
+    EXPECT_FALSE(static_cast<bool>(rowFor(*proc, id)["loaded"]));
+    EXPECT_EQ(rowFor(*proc, id)["lv2Error"].toString(), message);
+  }
 }
 
 #if JUCE_ARM

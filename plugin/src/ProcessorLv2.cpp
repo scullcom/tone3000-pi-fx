@@ -96,7 +96,6 @@ juce::String guitarixPortLabel(const juce::String& effect, const juce::String& s
   static constexpr PortLabel digitalDelay[] = {
       {"HOWPASS", "Low Pass"}, {"NOTES", "Note Subdivision"}, {"SYNC", "Tempo Sync"}};
   static constexpr PortLabel duckDelay[] = {{"RELESE", "Release"}, {"PINGPONG", "Ping-Pong"}};
-  static constexpr PortLabel detune[] = {{"MIDDLELOW", "Low Mid"}, {"MIDDLETREBLE", "High Mid"}};
   static constexpr PortLabel octave[] = {{"OCTAVE1", "Octave 1"}, {"OCTAVE2", "Octave 2"}};
   static constexpr PortLabel tremolo[] = {{"FREQ0", "Rate 1"}, {"FREQ1", "Rate 2"},
                                          {"FREQ2", "Rate 3"}, {"FREQ3", "Rate 4"},
@@ -118,7 +117,7 @@ juce::String guitarixPortLabel(const juce::String& effect, const juce::String& s
       {"gx_digital_delay_#_digital_delay_", digitalDelay},
       {"gx_digital_delay_st_#_digital_delay_st_", digitalDelay},
       {"gx_duck_delay_#_duck_delay_", duckDelay}, {"gx_duck_delay_st_#_duck_delay_st_", duckDelay},
-      {"gx_detune_#_detune_", detune}, {"gx_oc_2_#_oc_2_", octave},
+      {"gx_oc_2_#_oc_2_", octave},
       {"gx_switched_tremolo_#_switched_tremolo_", tremolo},
       {"gx_room_simulator_#_room_simulator_", room}, {"gx_zita_rev1_stereo#_zita_rev1_stereo", zita},
       {"gx_shimmizita_#_shimmizita_", shimmer}, {"gxmetal_amp#metal_amp", metal},
@@ -305,6 +304,8 @@ namespace {
 juce::String lv2Incompatibility(const juce::String& uri) {
   if (uri == "http://guitarix.sourceforge.net/plugins/gxtuner#tuner")
     return "GxTuner is unavailable. Use the built-in TONE3000 tuner instead.";
+  if (uri == "http://guitarix.sourceforge.net/plugins/gx_detune_#_detune_")
+    return "GxDetune is unavailable in TONE3000.";
 #if JUCE_ARM
   // Guitarix's non-SSE stereo tape path calls stereo_audio on its mono
   // noiser, where that callback is null. This also affects Guitarix 0.47.
