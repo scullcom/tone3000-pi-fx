@@ -60,6 +60,7 @@ private:
   const std::vector<PresetInfo>& presets() const { return services_.presets.presets(); }
   juce::String selectedBankId() const;
   juce::String selectedBankName() const;
+  void showSavePanel(bool createNew);
   void step(int direction);
   void loadAndClose(const juce::String& id);
   void refreshChrome();

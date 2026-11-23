@@ -12,6 +12,7 @@
 #include "widgets/DragScroller.h"
 #include "widgets/Popover.h"
 #include "widgets/TextField.h"
+#include "widgets/form/FormControls.h"
 
 namespace t3k::ui {
 
@@ -108,8 +109,7 @@ public:
   void paintButton(juce::Graphics& g, bool, bool) override {
     auto area = getLocalBounds().reduced(6, 0);
     if (bank_.isNotEmpty()) {
-      const auto label = pending_ ? "! " + bank_ : bank_;
-      paint::text(g, label, area.removeFromTop(16), Fonts::sans(11, true),
+      paint::text(g, bank_, area.removeFromTop(16), Fonts::sans(11, true),
                   pending_ ? kBankWarning : kMutedText, juce::Justification::centred);
     }
     paint::text(g, text_, area, Fonts::sans(14),
@@ -134,7 +134,7 @@ public:
 
   explicit SavePanel(PresetBar& owner) : owner_(owner) {
     setSize(kWidth, kBorder * 2 + kPad + kTitleHeight + 12 + kInputHeight + 12 + kButtonHeight + kPad);
-    name_.setPlaceholder("Name");
+    name_.setPlaceholder("Preset name");
     name_.onChange = [this](const juce::String&) { repaint(); };
     name_.onEnter = [this] { save(); };
     addAndMakeVisible(name_);
@@ -143,7 +143,8 @@ public:
     addAndMakeVisible(saveButton_);
   }
 
-  void show(const juce::String& prefill) {
+  void show(const juce::String& prefill, bool createNew) {
+    createNew_ = createNew;
     name_.setText(prefill);
     open(owner_, Align::left, kPanelGap, kPanelInset);
     name_.focus();
@@ -153,8 +154,10 @@ public:
     const auto box = getLocalBounds().toFloat();
     paint::fill(g, box, theme::kPanelCorner, theme::kPanelBg);
     paint::border(g, box, theme::kPanelCorner, theme::kBorder);
-    auto bank = owner_.selectedBankName();
-    paint::text(g, bank.isEmpty() ? juce::String("Save Preset") : "Save to " + bank,
+    const auto bank = owner_.selectedBankName();
+    juce::String title = createNew_ ? "Save New Preset" : "Save Preset";
+    if (bank.isNotEmpty()) title += " to " + bank;
+    paint::text(g, title,
                 contentBounds().reduced(kPad).removeFromTop(kTitleHeight),
                 Fonts::sans(14, true), theme::kWhite);
     // Outline pill: border rgba(235,235,245,0.6), label white / muted.
@@ -185,14 +188,32 @@ private:
   void save() {
     const auto name = name_.text().trim();
     if (name.isEmpty()) return;
-    close();
+    auto& services = owner_.services_;
+    if (createNew_) {
+      services.presets.refresh();
+      const auto bank = owner_.selectedBankId();
+      const bool nameTaken = std::any_of(owner_.presets().begin(), owner_.presets().end(), [&](const auto& preset) {
+        return !preset.factory && preset.bankId == bank && preset.name.equalsIgnoreCase(name);
+      });
+      if (nameTaken) {
+        services.toast.show("That preset name is already in use here");
+        name_.focus();
+        return;
+      }
+    }
     if (owner_.beforeSave) owner_.beforeSave();
-    if (owner_.services_.presets.save(name)) owner_.services_.toast.show("Preset Saved");
+    if (services.presets.save(name)) {
+      close();
+      services.toast.show("Preset Saved");
+    } else {
+      services.toast.show("Preset could not be saved");
+    }
   }
 
   PresetBar& owner_;
   TextField name_;
   Hit saveButton_;
+  bool createNew_ = false;
 };
 
 // Preset browser
@@ -201,6 +222,8 @@ public:
   static constexpr int kWidth = 360;
   static constexpr int kPad = 12;
   static constexpr int kSearchHeight = 33;  // 13px text + 8px padding + 1px border
+  static constexpr int kActionHeight = 29;
+  static constexpr int kActionGap = 8;
 
   explicit BrowsePanel(PresetBar& owner) : owner_(owner) {
     search_.setPlaceholder("Search presets");
@@ -219,9 +242,11 @@ public:
     };
     addChildComponent(reorderToggle_);
     newBank_.setHelpText("Create a preset bank");
-    newBank_.setName("New Bank");
     newBank_.onClick = [this] { editBankName(std::nullopt); };
     addChildComponent(newBank_);
+    saveNew_.setHelpText("Save the current rig as a new preset in the selected bank");
+    saveNew_.onClick = [this] { owner_.showSavePanel(true); };
+    addChildComponent(saveNew_);
     previousBank_.setHelpText("Previous Bank");
     previousBank_.setName("Previous Bank");
     previousBank_.onClick = [this] { owner_.services_.presets.stepPresetBank(-1); };
@@ -264,10 +289,6 @@ public:
   void resized() override {
     auto area = contentBounds().reduced(kPad, 0).withTrimmedTop(kPad);
     auto row = area.removeFromTop(kSearchHeight);
-    if (newBank_.isVisible()) {
-      newBank_.setBounds(row.removeFromRight(29).withSizeKeepingCentre(29, 29));
-      row.removeFromRight(6);
-    }
     if (nextBank_.isVisible()) {
       nextBank_.setBounds(row.removeFromRight(21).withSizeKeepingCentre(21, 29));
       previousBank_.setBounds(row.removeFromRight(21).withSizeKeepingCentre(21, 29));
@@ -280,6 +301,13 @@ public:
     if (pcToggle_.isVisible())
       pcToggle_.setBounds(row.removeFromRight(29).withSizeKeepingCentre(29, 29)), row.removeFromRight(6);
     search_.setBounds(row);
+    if (saveNew_.isVisible()) {
+      area.removeFromTop(kActionGap);
+      auto actions = area.removeFromTop(kActionHeight);
+      newBank_.setBounds(actions.removeFromRight(newBank_.preferredWidth()));
+      actions.removeFromRight(kActionGap);
+      saveNew_.setBounds(actions);
+    }
     viewport_.setBounds(area);
     content_.setSize(viewport_.getWidth(), content_.getHeight());
   }
@@ -312,7 +340,8 @@ private:
   TextField search_;
   GlyphButton pcToggle_{Icon::MidiPort, 15, 7, help::Key::presetPcToggle};
   GlyphButton reorderToggle_{Icon::ArrowUpDown, 15, 7, help::Key::presetReorder};
-  IconButton newBank_{Icon::Plus, 28};
+  FormButton saveNew_{"Save New Preset", FormButton::outlined()};
+  FormButton newBank_{"New Bank", FormButton::outlined()};
   Chevron previousBank_{Icon::ChevronLeft, help::Key::presetPrev};
   Chevron nextBank_{Icon::ChevronRight, help::Key::presetNext};
   DragScroller viewport_{DragScroller::Axis::vertical, DragScroller::Keys::none};  // the arrows walk the rows
@@ -534,6 +563,7 @@ void PresetBar::BrowsePanel::rebuild() {
 
   pcToggle_.setVisible(!presets.empty());
   newBank_.setVisible(owner_.services_.chain.state().standalone);
+  saveNew_.setVisible(newBank_.isVisible());
   previousBank_.setVisible(banked());
   nextBank_.setVisible(banked());
   pcToggle_.setColour(showPc() ? theme::kWhite : kMutedText);
@@ -597,7 +627,8 @@ void PresetBar::BrowsePanel::rebuild() {
   layoutRows();
 
   const int listHeight = std::min(kListMaxHeight, content_.getHeight());
-  setSize(kWidth, kBorder * 2 + kPad + kSearchHeight + listHeight);
+  const int actionsHeight = saveNew_.isVisible() ? kActionGap + kActionHeight : 0;
+  setSize(kWidth, kBorder * 2 + kPad + kSearchHeight + actionsHeight + listHeight);
   resized();
   reposition();
   for (auto* row : rows_)
@@ -802,6 +833,7 @@ PresetBar::PresetBar(Services& services)
   addAndMakeVisible(save_);
 
   newButton_.setHelpText(help::text(help::Key::presetNew));
+  newButton_.setName("Start a new rig");
   newButton_.onClick = [this] {
     closePanels();
     if (onReset) onReset();
@@ -830,6 +862,7 @@ void PresetBar::presetsChanged(const std::vector<PresetInfo>&) {
 void PresetBar::chainChanged(const ChainState&) {
   refreshChrome();
   browsePanel_->presetsChanged();
+  if (savePanel_->isOpen()) savePanel_->repaint();
 }
 
 void PresetBar::prefChanged(const juce::String& key) {
@@ -900,15 +933,19 @@ void PresetBar::openSavePanel() {
     savePanel_->close();
     return;
   }
+  showSavePanel(false);
+}
+
+void PresetBar::showSavePanel(bool createNew) {
   browsePanel_->close();
   // Prefill with the active user preset's name: saving it again is the
   // one-click "update" path (same name overwrites in place).
   juce::String prefill;
-  if (active())
+  if (!createNew && active())
     for (const auto& p : presets())
       if (p.id == active()->id && !p.factory &&
           (services_.presets.banks().empty() || p.bankId == selectedBankId())) prefill = p.name;
-  savePanel_->show(prefill);
+  savePanel_->show(prefill, createNew);
 }
 
 void PresetBar::openBrowsePanel() {
