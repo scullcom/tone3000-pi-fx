@@ -112,7 +112,7 @@ TEST(Lv2ChainTest, MissingEffectPassesAudioAndRoundTripsPreset) {
   EXPECT_FLOAT_EQ(static_cast<float>(value), 0.625f);
 }
 
-TEST(Lv2ChainTest, GuitarixFrequencyLabelsKeepTheirPortIds) {
+TEST(Lv2ChainTest, GuitarixDisplayLabelsKeepTheirPortIds) {
   PresetDirectory presets;
   auto proc = makeProcessor(presets.dir);
   if (!proc->supportsLv2()) GTEST_SKIP() << "Requires a Linux LV2 host build";
@@ -132,6 +132,16 @@ TEST(Lv2ChainTest, GuitarixFrequencyLabelsKeepTheirPortIds) {
       {"gx_graphiceq_#_graphiceq_", "sym:G2", "62.5 Hz", "dB"},
       {"gx_barkgraphiceq_#_barkgraphiceq_", "sym:G24", "13.5 kHz", "dB"},
       {"gx_shimmizita_#_shimmizita_", "sym:F1", "Low Frequency", "Hz"},
+      {"gx_studiopre_st#studiopre_st", "sym:bright_l", "Bright (Left)", nullptr},
+      {"gx_studiopre_st#studiopre_st", "sym:middle_r", "Middle (Right)", nullptr},
+      {"gx_studiopre_st#studiopre_st", "sym:master_l", "Master (Left)", nullptr},
+      {"gx_studiopre_st#studiopre_st", "sym:master_r", "Master (Right)", nullptr},
+      {"gx_mbcompressor_#_mbcompressor_", "sym:ATTACK4", "Band 4 Attack", nullptr},
+      {"gx_mbecho_#_mbecho_", "sym:PERCENT1", "Band 1 Feedback", nullptr},
+      {"gx_switched_tremolo_#_switched_tremolo_", "sym:FREQ0", "Rate 1", nullptr},
+      {"gx_digital_delay_#_digital_delay_", "sym:HOWPASS", "Low Pass", nullptr},
+      {"gx_digital_delay_#_digital_delay_", "sym:BPM", "BPM", nullptr},
+      {"gxtilttone#tilttone", "sym:body", "Body", nullptr},
   };
   int checked = 0;
   for (const auto& control : cases) {
@@ -151,7 +161,8 @@ TEST(Lv2ChainTest, GuitarixFrequencyLabelsKeepTheirPortIds) {
     });
     ASSERT_NE(port, rows->end());
     EXPECT_EQ((*port)["name"].toString(), control.label);
-    EXPECT_EQ((*port)["unit"].toString(), control.unit);
+    if (control.unit != nullptr) EXPECT_EQ((*port)["unit"].toString(), control.unit);
+    ASSERT_TRUE(proc->removeChainBlock(id));
     ++checked;
   }
   if (checked == 0) GTEST_SKIP() << "Requires at least one of the Guitarix effects under test";

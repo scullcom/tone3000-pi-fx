@@ -18,34 +18,155 @@ constexpr const char* kBarkBands[] = {
     "10.5 kHz", "13.5 kHz"};
 constexpr const char* kShimmiFrequencies[] = {"Low Frequency", "High Frequency"};
 
+constexpr auto kGuitarixUri = "http://guitarix.sourceforge.net/plugins/";
+
+struct PortLabel {
+  const char* symbol;
+  const char* label;
+};
+
+juce::String numberedLabel(const juce::String& symbol, juce::String heading,
+                           char first, char last,
+                           std::span<const PortLabel> labels) {
+  if (symbol.length() < 2) return {};
+  const auto number = symbol[symbol.length() - 1];
+  if (number < first || number > last) return {};
+  const auto stem = symbol.dropLastCharacters(1);
+  for (const auto& [port, label] : labels) {
+    if (stem == port) return heading + symbol.getLastCharacters(1) + " " + label;
+  }
+  return {};
+}
+
+// These aliases are based on Guitarix 0.46's own editors, MOD labels and DSP.
+// Match the URI, stable symbol and old name so newer descriptive metadata wins.
+juce::String guitarixPortLabel(const juce::String& effect, const juce::String& symbol,
+                              const juce::String& name) {
+  if (effect == "gx_studiopre_st#studiopre_st") {
+    constexpr PortLabel controls[] = {{"bright", "Bright"}, {"volume", "Volume"},
+                                     {"bass", "Bass"}, {"middle", "Middle"},
+                                     {"treble", "Treble"}, {"master", "Master"}};
+    const bool right = symbol.endsWith("_r");
+    if (!right && !symbol.endsWith("_l")) return {};
+    // The old TTL gives both Master ports the left-channel name.
+    if (!name.equalsIgnoreCase(symbol) && !(symbol == "master_r" && name.equalsIgnoreCase("master_l")))
+      return {};
+    const auto stem = symbol.dropLastCharacters(2);
+    for (const auto& [port, label] : controls) {
+      if (stem == port) return juce::String(label) + (right ? " (Right)" : " (Left)");
+    }
+    return {};
+  }
+
+  if (effect == "gx_mbcompressor_#_mbcompressor_" || effect == "gx_mbdelay_#_mbdelay_" ||
+      effect == "gx_mbdistortion_#_mbdistortion_" || effect == "gx_mbecho_#_mbecho_" ||
+      effect == "gx_mbreverb_#_mbreverb_") {
+    if (symbol == "CROSSOVER_B1_B2" && (name == symbol || name == "LOW SHELF"))
+      return "Crossover 1/2";
+    if (name != symbol) return {};
+    constexpr PortLabel crossovers[] = {{"CROSSOVER_B2_B3", "Crossover 2/3"},
+                                       {"CROSSOVER_B3_B4", "Crossover 3/4"},
+                                       {"CROSSOVER_B4_B5", "Crossover 4/5"}};
+    for (const auto& [port, label] : crossovers) {
+      if (symbol == port) return label;
+    }
+    constexpr PortLabel bands[] = {
+        {"ATTACK", "Attack"}, {"DAMP", "Damping"}, {"DELAY", "Delay"},
+        {"DRIVE", "Drive"}, {"FEEDBACK", "Feedback"}, {"GAIN", "Level"},
+        {"MAKEUP", "Makeup Gain"}, {"MAKEUPTHRESHOLD", "Threshold Correction"},
+        {"MODE", "Mode"}, {"OFFSET", "Offset"}, {"PERCENT", "Feedback"},
+        {"RATIO", "Ratio"}, {"RELEASE", "Release"}, {"ROOMSIZE", "Room Size"},
+        {"TIME", "Tempo"}, {"WET_DRY", "Dry/Wet"}};
+    return numberedLabel(symbol, "Band ", '1', '5', bands);
+  }
+
+  if (effect == "gx_livelooper_#_livelooper_" && name == symbol) {
+    constexpr PortLabel tracks[] = {{"clip", "Cut"}, {"clips", "Clip"}, {"speed", "Speed"},
+                                   {"level", "Level"}, {"play", "Play"}, {"rec", "Record"},
+                                   {"reset", "Reset"}};
+    return numberedLabel(symbol, "Track ", '1', '4', tracks);
+  }
+
+  if (symbol == "WET_DRY" && name == symbol) return "Dry/Wet";
+
+  struct EffectLabels {
+    const char* effect;
+    std::span<const PortLabel> ports;
+  };
+  static constexpr PortLabel digitalDelay[] = {
+      {"HOWPASS", "Low Pass"}, {"NOTES", "Note Subdivision"}, {"SYNC", "Tempo Sync"}};
+  static constexpr PortLabel duckDelay[] = {{"RELESE", "Release"}, {"PINGPONG", "Ping-Pong"}};
+  static constexpr PortLabel detune[] = {{"MIDDLELOW", "Low Mid"}, {"MIDDLETREBLE", "High Mid"}};
+  static constexpr PortLabel octave[] = {{"OCTAVE1", "Octave 1"}, {"OCTAVE2", "Octave 2"}};
+  static constexpr PortLabel tremolo[] = {{"FREQ0", "Rate 1"}, {"FREQ1", "Rate 2"},
+                                         {"FREQ2", "Rate 3"}, {"FREQ3", "Rate 4"},
+                                         {"SWITCHFREQ", "Switch Rate"}};
+  static constexpr PortLabel room[] = {{"PREDELAYMS", "Pre-delay"}, {"ROOMSIZE", "Room Size"},
+                                      {"DRYWET", "Dry/Wet"}};
+  static constexpr PortLabel zita[] = {
+      {"EQ1_FREQ", "EQ 1 Frequency"}, {"EQ2_FREQ", "EQ 2 Frequency"},
+      {"EQ1_LEVEL", "EQ 1 Level"}, {"EQ2_LEVEL", "EQ 2 Level"}, {"IN_DELAY", "Input Delay"},
+      {"LOW_RT60", "Low Decay"}, {"MID_RT60", "Mid Decay"}, {"LF_X", "Low Crossover"},
+      {"HF_DAMPING", "High-Frequency Damping"}, {"DRY_WET_MIX", "Dry/Wet Mix"}};
+  static constexpr PortLabel shimmer[] = {
+      {"CONTROL", "Modulation Source"}, {"DEPTH", "Modulation Depth"}, {"DRYWET", "Dry/Wet"},
+      {"ENVELOPE", "Envelope Time"}, {"PSDRYWET", "Pitch Mix"}, {"SHIFT", "Pitch Shift"},
+      {"SPEED", "LFO Speed"}, {"T60DS", "Low Decay"}, {"T60M", "High Decay"}};
+  static constexpr PortLabel metal[] = {{"PREGAIN", "Pre Gain"}, {"GAIN1", "Level"}};
+  static constexpr PortLabel tape[] = {{"wowdepth", "Wow Depth"}, {"wowfreq", "Wow Frequency"}};
+  static constexpr EffectLabels effects[] = {
+      {"gx_digital_delay_#_digital_delay_", digitalDelay},
+      {"gx_digital_delay_st_#_digital_delay_st_", digitalDelay},
+      {"gx_duck_delay_#_duck_delay_", duckDelay}, {"gx_duck_delay_st_#_duck_delay_st_", duckDelay},
+      {"gx_detune_#_detune_", detune}, {"gx_oc_2_#_oc_2_", octave},
+      {"gx_switched_tremolo_#_switched_tremolo_", tremolo},
+      {"gx_room_simulator_#_room_simulator_", room}, {"gx_zita_rev1_stereo#_zita_rev1_stereo", zita},
+      {"gx_shimmizita_#_shimmizita_", shimmer}, {"gxmetal_amp#metal_amp", metal},
+      {"gxmetal_head#metal_head", metal}, {"gxtape#tape", tape}, {"gxtape_st#tape", tape}};
+
+  if (effect == "gxtilttone#tilttone" && symbol == "body" && name == "Bpdy") return "Body";
+  if (!name.equalsIgnoreCase(symbol)) return {};
+  for (const auto& [plugin, ports] : effects) {
+    if (effect != plugin) continue;
+    for (const auto& [port, label] : ports) {
+      if (symbol == port) return label;
+    }
+    break;
+  }
+  return {};
+}
+
 void labelGuitarixParameters(const juce::String& uri, juce::var& parameters) {
+  if (!uri.startsWith(kGuitarixUri)) return;
+  const auto effect = uri.fromFirstOccurrenceOf(kGuitarixUri, false, false);
   std::span<const char* const> labels;
   const char* prefix = "G";
   const char* unit = "dB";
-  if (uri == "http://guitarix.sourceforge.net/plugins/gx_graphiceq_#_graphiceq_") {
+  if (effect == "gx_graphiceq_#_graphiceq_") {
     labels = kGraphicBands;
-  } else if (uri == "http://guitarix.sourceforge.net/plugins/gx_barkgraphiceq_#_barkgraphiceq_") {
+  } else if (effect == "gx_barkgraphiceq_#_barkgraphiceq_") {
     labels = kBarkBands;
-  } else if (uri == "http://guitarix.sourceforge.net/plugins/gx_shimmizita_#_shimmizita_") {
+  } else if (effect == "gx_shimmizita_#_shimmizita_") {
     labels = kShimmiFrequencies;
     prefix = "F";
     unit = "Hz";
-  } else {
-    return;
   }
 
   if (auto* rows = parameters.getArray()) {
     for (auto& row : *rows) {
       auto* control = row.getDynamicObject();
-      if (control == nullptr) continue;
       const auto id = row["id"].toString();
+      if (control == nullptr || !id.startsWith("sym:")) continue;
+      const auto symbol = id.substring(4);
       const auto name = row["name"].toString();
-      const int index = name.substring(1).getIntValue() - 1;
-      if (index < 0 || static_cast<size_t>(index) >= labels.size() ||
-          name != prefix + juce::String(index + 1) || id != "sym:" + name)
-        continue;  // Keep descriptive names provided by newer plugin builds.
-      control->setProperty("name", labels[static_cast<size_t>(index)]);
-      if (row["unit"].toString().isEmpty()) control->setProperty("unit", unit);
+      const int index = labels.empty() ? -1 : name.substring(1).getIntValue() - 1;
+      if (index >= 0 && static_cast<size_t>(index) < labels.size() &&
+          name == prefix + juce::String(index + 1) && symbol == name) {
+        control->setProperty("name", labels[static_cast<size_t>(index)]);
+        if (row["unit"].toString().isEmpty()) control->setProperty("unit", unit);
+      } else if (const auto label = guitarixPortLabel(effect, symbol, name); label.isNotEmpty()) {
+        control->setProperty("name", label);
+      }
     }
   }
 }
