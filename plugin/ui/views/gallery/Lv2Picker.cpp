@@ -1,9 +1,11 @@
-#include "GalleryTile.h"
+#include "Lv2EffectMenu.h"
 
 #include "core/Fonts.h"
 #include "core/Icons.h"
 #include "core/Paint.h"
 #include "core/Theme.h"
+#include "services/Services.h"
+#include "widgets/ContextMenu.h"
 #include "widgets/DragScroller.h"
 #include "widgets/IconButton.h"
 #include "widgets/MenuRow.h"
@@ -65,9 +67,11 @@ void saveFavourites(UiPrefs& prefs, const juce::StringArray& favourites) {
 
 class Lv2Picker final : public Popover {
 public:
-  Lv2Picker(GalleryTile& tile, juce::var effects, UiPrefs& prefs,
+  Lv2Picker(juce::Component& anchor, Lv2EffectMenu::Placement placement,
+            juce::var effects, UiPrefs& prefs,
             std::function<void(const juce::var&)> select)
-      : tile_(tile), effects_(std::move(effects)), prefs_(prefs), select_(std::move(select)) {
+      : anchor_(anchor), placement_(placement), effects_(std::move(effects)), prefs_(prefs),
+        select_(std::move(select)) {
     setTitle("LV2 effects");
     title_.setFont(Fonts::sans(15, true));
     title_.setColour(juce::Label::textColourId, theme::kWhite);
@@ -95,7 +99,7 @@ public:
   }
 
   void show(bool otherEffects) {
-    auto* host = tile_.findParentComponentOfClass<OverlayHost>();
+    auto* host = anchor_.findParentComponentOfClass<OverlayHost>();
     if (host == nullptr) return;
     close();
     showingOther_ = otherEffects;
@@ -108,15 +112,18 @@ public:
     refresh();
 
     const auto& overlay = host->overlayLayer();
-    const auto available = tile_.getLocalArea(&overlay, overlay.getLocalBounds());
+    const auto available = anchor_.getLocalArea(&overlay, overlay.getLocalBounds());
     const int rowsHeight = juce::jmax(1, static_cast<int>(rows_.size())) * MenuRow::kContext.height;
     const int header = kTitleHeight + (otherEffects ? kSearchHeight + kGap : 0);
     const int footer = other_.isVisible() ? kButtonHeight + kGap : 0;
     const int height = 2 * kInset + header + (otherEffects ? 250 : juce::jmin(250, rowsHeight)) + footer;
     setSize(juce::jmin(250, available.getWidth()), juce::jmin(height, available.getHeight()));
     resized();
-    openAt(tile_, tile_.getLocalBounds().getCentre().translated(ContextMenu::kCursorOffset,
-                                                               ContextMenu::kCursorOffset));
+    if (placement_ == Lv2EffectMenu::Placement::belowButton)
+      open(anchor_, Align::right, kGap);
+    else
+      openAt(anchor_, anchor_.getLocalBounds().getCentre().translated(ContextMenu::kCursorOffset,
+                                                                      ContextMenu::kCursorOffset));
     if (otherEffects && isShowing()) search_.grabKeyboardFocus();
   }
 
@@ -201,7 +208,8 @@ private:
     for (auto& row : rows_) row->setBounds(area.removeFromTop(MenuRow::kContext.height));
   }
 
-  GalleryTile& tile_;
+  juce::Component& anchor_;
+  Lv2EffectMenu::Placement placement_;
   juce::var effects_;
   UiPrefs& prefs_;
   std::function<void(const juce::var&)> select_;
@@ -218,41 +226,48 @@ private:
 
 }  // namespace
 
-void GalleryTile::pickLv2Effect(bool replace) {
-  if (scanningEffects_ || !services().backend.supportsLv2()) return;
-  scanningEffects_ = true;
-  services().toast.show("Scanning installed LV2 effects");
-  const auto safe = juce::Component::SafePointer<GalleryTile>(this);
-  services().backend.scanLv2Effects([safe, replace](juce::var list) {
-    if (!safe) return;
-    safe->scanningEffects_ = false;
+Lv2EffectMenu::Lv2EffectMenu(Services& services, juce::Component& anchor, Placement placement)
+    : services_(services), anchor_(anchor), placement_(placement) {}
+
+Lv2EffectMenu::~Lv2EffectMenu() {
+  if (panel_) panel_->close();
+}
+
+void Lv2EffectMenu::show(const std::string& blockId, bool replace) {
+  if (scanning_ || !services_.backend.supportsLv2()) return;
+  scanning_ = true;
+  services_.toast.show("Scanning installed LV2 effects");
+  const auto safe = juce::WeakReference<Lv2EffectMenu>(this);
+  services_.backend.scanLv2Effects([safe, blockId, replace](juce::var list) {
+    if (safe == nullptr) return;
+    safe->scanning_ = false;
+    if (!safe->anchor_.isShowing()) return;
     auto* effects = list.getArray();
     if (effects == nullptr || effects->isEmpty()) {
-      safe->services().toast.show("No installed LV2 audio effects found");
+      safe->services_.toast.show("No installed LV2 audio effects found");
       return;
     }
     std::sort(effects->begin(), effects->end(), [](const juce::var& a, const juce::var& b) {
       return a["name"].toString().compareNatural(b["name"].toString()) < 0;
     });
-    auto picker = std::make_unique<Lv2Picker>(*safe.getComponent(), list, safe->services().prefs,
-        [safe, replace](const juce::var& effect) {
-          if (!safe) return;
-          auto& services = safe->services();
-          const auto id = safe->blockId();
+    auto picker = std::make_unique<Lv2Picker>(safe->anchor_, safe->placement_, list, safe->services_.prefs,
+        [safe, blockId, replace](const juce::var& effect) {
+          if (safe == nullptr) return;
+          auto& services = safe->services_;
           const auto uri = effect["uri"].toString();
           if (replace) {
             const auto finished = [safe](const juce::String& error) {
-              if (safe && error.isNotEmpty())
-                safe->services().toast.show("Couldn't replace effect: " + error);
+              if (safe != nullptr && error.isNotEmpty())
+                safe->services_.toast.show("Couldn't replace effect: " + error);
             };
-            if (!services.chain.swapLv2Effect(id, uri, finished))
+            if (!services.chain.swapLv2Effect(blockId, uri, finished))
               services.toast.show("That effect can't be replaced right now");
-          } else if (services.chain.addLv2Effect(id, uri, effect["name"].toString()).empty()) {
+          } else if (services.chain.addLv2Effect(blockId, uri, effect["name"].toString()).empty()) {
             services.toast.show("That slot is no longer available");
           }
         });
     auto& panel = *picker;
-    safe->effectPicker_ = std::move(picker);
+    safe->panel_ = std::move(picker);
     panel.show(false);
   });
 }

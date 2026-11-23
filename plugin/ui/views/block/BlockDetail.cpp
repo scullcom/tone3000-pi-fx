@@ -5,6 +5,8 @@
 #include "core/Paint.h"
 #include "core/Theme.h"
 #include "services/Lv2Artwork.h"
+#include "views/gallery/Lv2EffectMenu.h"
+#include "widgets/ChromeIconButton.h"
 #include "widgets/form/FormControls.h"
 #include "widgets/form/SelectField.h"
 
@@ -43,8 +45,10 @@ Found find(const ChainState& state, const std::string& blockId) {
 
 class BlockDetail::Lv2Controls : public juce::Component {
 public:
-  Lv2Controls(Services& services, const std::string& id) : services_(services), id_(id) {
+  Lv2Controls(Services& services, const std::string& id)
+      : services_(services), id_(id), effectMenu_(services, swap_, Lv2EffectMenu::Placement::belowButton) {
     title_.setFont(Fonts::sans(17, true));
+    title_.setBorderSize(juce::BorderSize<int>(0));
     status_.setFont(Fonts::sans(13));
     title_.setColour(juce::Label::textColourId, theme::kWhite);
     status_.setColour(juce::Label::textColourId, theme::kGray);
@@ -53,6 +57,12 @@ public:
     addChildComponent(retry_);
     addAndMakeVisible(chooseImage_);
     addChildComponent(removeImage_);
+    swap_.setTitle("Swap LV2 effect");
+    swap_.setHelpText("Choose a different LV2 effect for this slot.");
+    swap_.onClick = [this] { effectMenu_.show(id_, true); };
+    addAndMakeVisible(swap_);
+    remove_.onClick = [this] { services_.chain.removeBlock(id_); };
+    addAndMakeVisible(remove_);
     chooseImage_.onClick = [this] { chooseImage(); };
     removeImage_.onClick = [this] {
       const auto result = lv2Artwork::removeCustom(services_.prefs, uri_);
@@ -71,6 +81,7 @@ public:
       syncArtwork();
     }
     retry_.setVisible(block.loadFailed && !block.modelLoading && services_.backend.supportsLv2());
+    swap_.setEnabled(!block.modelLoading && services_.backend.supportsLv2());
 
     const auto parameters = services_.backend.getLv2Parameters(id_);
     const auto* rows = parameters.getArray();
@@ -92,7 +103,7 @@ public:
                     : count == 0 ? "No adjustable parameters" : juce::String(),
                     juce::dontSendNotification);
     status_.setVisible(status_.getText().isNotEmpty());
-    const int height = 96 + (status_.isVisible() ? 30 : 0)
+    const int height = 16 + kHeaderHeight + 8 + (status_.isVisible() ? 30 : 0)
                            + (retry_.isVisible() ? 38 : 0) + count * kRowHeight;
     setSize(getWidth(), height);
     resized();
@@ -106,11 +117,26 @@ public:
 
   void resized() override {
     auto area = getLocalBounds().reduced(16, 8);
-    title_.setBounds(area.removeFromTop(40));
-    auto artwork = area.removeFromTop(32);
-    chooseImage_.setBounds(artwork.removeFromLeft(juce::jmin(142, artwork.getWidth() / 2)));
-    artwork.removeFromLeft(8);
-    removeImage_.setBounds(artwork.removeFromLeft(juce::jmin(132, artwork.getWidth())));
+    auto header = area.removeFromTop(kHeaderHeight);
+    const int box = theme::kIconBoxSize;
+    remove_.setBounds(header.removeFromRight(box).withSizeKeepingCentre(box, box));
+    header.removeFromRight(24);
+    swap_.setBounds(header.removeFromRight(box).withSizeKeepingCentre(box, box));
+    header.removeFromRight(16);
+
+    const int artworkBudget = header.getWidth() / 2;
+    const bool custom = removeImage_.isVisible();
+    const int chooseWidth = juce::jmin(142, custom ? artworkBudget / 2 : artworkBudget);
+    const int removeImageWidth = custom ? juce::jmin(132, artworkBudget - chooseWidth) : 0;
+    const int titleWidth = juce::roundToInt(std::ceil(Fonts::width(title_.getFont(), title_.getText())));
+    const int titleLimit = juce::jmax(0, header.getWidth() - chooseWidth - removeImageWidth - (custom ? 20 : 12));
+    title_.setBounds(header.removeFromLeft(juce::jmin(titleWidth, titleLimit)));
+    header.removeFromLeft(12);
+    chooseImage_.setBounds(header.removeFromLeft(chooseWidth).withSizeKeepingCentre(chooseWidth, 32));
+    if (custom) {
+      header.removeFromLeft(8);
+      removeImage_.setBounds(header.removeFromLeft(removeImageWidth).withSizeKeepingCentre(removeImageWidth, 32));
+    }
     area.removeFromTop(8);
     if (status_.isVisible()) status_.setBounds(area.removeFromTop(30));
     if (retry_.isVisible()) retry_.setBounds(area.removeFromTop(30).removeFromLeft(96));
@@ -124,6 +150,7 @@ private:
     chooseImage_.setLabel(custom ? "Replace image" : "Choose image...");
     chooseImage_.setEnabled(services_.prefs.settingsFile() != juce::File{});
     removeImage_.setVisible(custom);
+    resized();
   }
 
   void chooseImage() {
@@ -145,6 +172,7 @@ private:
     });
   }
 
+  static constexpr int kHeaderHeight = 40;
   static constexpr int kRowHeight = 48;
 
   class Row : public juce::Component {
@@ -244,6 +272,9 @@ private:
   juce::Label title_, status_;
   FormButton retry_{"Retry", FormButton::outlined()};
   std::vector<std::unique_ptr<Row>> controls_;
+  ChromeIconButton swap_{Icon::ArrowLeftRight, ChromeIconButton::Tone::plain, help::Key::swapTone};
+  ChromeIconButton remove_{Icon::Trash2, ChromeIconButton::Tone::plain, help::Key::removeBlock};
+  Lv2EffectMenu effectMenu_;
 };
 
 BlockDetail::BlockDetail(Services& services, const std::string& blockId)

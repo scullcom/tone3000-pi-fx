@@ -5,7 +5,7 @@
 namespace t3k::ui {
 
 GalleryTile::GalleryTile(Services& services, std::string blockId, int size)
-    : services_(services), blockId_(std::move(blockId)), size_(size) {
+    : services_(services), blockId_(std::move(blockId)), size_(size), effectMenu_(services, *this) {
   setSize(size, size);
   setMouseCursor(juce::MouseCursor::PointingHandCursor);
   // A drag on a tile sorts it; the gaps around the tiles pan the chain view.
@@ -20,7 +20,6 @@ GalleryTile::GalleryTile(Services& services, std::string blockId, int size)
 GalleryTile::~GalleryTile() {
   // The menu lives on the overlay layer; take it down with the tile.
   if (menu_ != nullptr) menu_->close();
-  if (effectPicker_ != nullptr) effectPicker_->close();
 }
 
 TileDragHost* GalleryTile::host() { return findParentComponentOfClass<TileDragHost>(); }

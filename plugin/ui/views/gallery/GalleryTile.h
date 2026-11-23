@@ -14,6 +14,7 @@
 #include "core/DelayedCall.h"
 #include "services/Services.h"
 #include "widgets/ContextMenu.h"
+#include "Lv2EffectMenu.h"
 
 namespace t3k::ui {
 
@@ -69,7 +70,7 @@ protected:
 
   bool dropArmed() const { return dropArmed_; }
   void openMenu(juce::Point<int> at);
-  void pickLv2Effect(bool replace = false);
+  void pickLv2Effect(bool replace = false) { effectMenu_.show(blockId_, replace); }
   bool menuOpen() const { return menu_ != nullptr && menu_->isOpen(); }
   Services& services() { return services_; }
 
@@ -102,8 +103,7 @@ private:
   juce::int64 menuDismissedMs_ = 0;
   DelayedCall hold_;
   std::unique_ptr<ContextMenu> menu_;
-  std::unique_ptr<Popover> effectPicker_;
-  bool scanningEffects_ = false;
+  Lv2EffectMenu effectMenu_;
 };
 
 }  // namespace t3k::ui
