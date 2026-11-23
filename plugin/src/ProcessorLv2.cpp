@@ -303,13 +303,13 @@ bool TONE3000Processor::supportsLv2() const {
 #if T3K_ENABLE_LV2_HOST
 namespace {
 juce::String lv2Incompatibility(const juce::String& uri) {
+  if (uri == "http://guitarix.sourceforge.net/plugins/gxtuner#tuner")
+    return "GxTuner is unavailable. Use the built-in TONE3000 tuner instead.";
 #if JUCE_ARM
   // Guitarix's non-SSE stereo tape path calls stereo_audio on its mono
   // noiser, where that callback is null. This also affects Guitarix 0.47.
   if (uri == "http://guitarix.sourceforge.net/plugins/gxtape_st#tape")
     return "Gx Tape Stereo crashes on ARM. Use Gx Tape instead.";
-#else
-  juce::ignoreUnused(uri);
 #endif
   return {};
 }
